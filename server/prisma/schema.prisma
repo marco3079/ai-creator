@@ -33,6 +33,14 @@ enum StatusJob {
   CANCELADO
 }
 
+// Área "Modelos": modelos independentes dos agentes, com vários treinos (experimentos).
+enum TipoModelo {
+  TINYML
+  TABULAR
+  LLM_NUVEM
+  LLM_LOCAL
+}
+
 enum Placa {
   ESP32
   ESP32S3
@@ -149,14 +157,16 @@ model Dataset {
   id             Int      @id @default(autoincrement())
   nome           String
   descricao      String   @default("")
-  tipo           String // SERIE_TEMPORAL | AUDIO | TABELA
+  tipo           String // SERIE_TEMPORAL | AUDIO | TABELA | IMAGENS | CONVERSAS
   classes        String[] @default([])
   janela         Int      @default(0)
-  caminhoArquivo String // relativo a DATA_DIR (ex.: "datasets/3.csv")
+  caminhoArquivo String // relativo a DATA_DIR: "datasets/3.csv", "datasets/4/" (IMAGENS) ou "datasets/5.jsonl" (CONVERSAS)
   amostras       Int      @default(0)
   colunas        Int      @default(0) // nº de colunas de atributos (sem o rótulo)
   criadoEm       DateTime @default(now())
   treinos        Treino[]
+  modelos        Modelo[]
+  treinosModelo  TreinoModelo[]
 }
 
 model Treino {
@@ -183,6 +193,7 @@ model Build {
   projeto      Projeto   @relation(fields: [projetoId], references: [id], onDelete: Cascade)
   placa        Placa
   agenteId     Int? // agente TinyML cujo modelo foi embutido (include/model_data.h)
+  modeloTreinoId Int? // treino da área Modelos cujos artefatos C foram embutidos em include/
   status       StatusJob @default(FILA)
   log          String    @default("") @db.Text
   artefato     String? // relativo a DATA_DIR (ex.: "builds/12/firmware.bin")
@@ -217,4 +228,44 @@ model Plataforma {
   nome        String @default("AI Creator")
   slogan      String @default("Do prompt ao microcontrolador.")
   corPrimaria String @default("#2563eb")
+}
+
+model Modelo {
+  id           Int            @id @default(autoincrement())
+  nome         String
+  slug         String         @unique
+  descricao    String         @default("")
+  tipo         TipoModelo
+  tarefa       String // TINYML: CLASSIFICACAO | REGRESSAO | IMAGEM; TABULAR: CLASSIFICACAO | REGRESSAO; LLM_*: CHAT
+  datasetId    Int?
+  dataset      Dataset?       @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  config       Json // ConfigModelo do tipo (ver CONTRATOS-MODELOS.md)
+  tags         String[]       @default([])
+  autorId      Int?
+  criadoEm     DateTime       @default(now())
+  atualizadoEm DateTime       @updatedAt
+  treinos      TreinoModelo[]
+}
+
+// Um treino (experimento) de um modelo. Cada treino com SUCESSO é uma versão utilizável.
+model TreinoModelo {
+  id               Int       @id @default(autoincrement())
+  modeloId         Int
+  modelo           Modelo    @relation(fields: [modeloId], references: [id], onDelete: Cascade)
+  numero           Int // 1, 2, 3... dentro do modelo
+  datasetId        Int?
+  dataset          Dataset?  @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  status           StatusJob @default(FILA)
+  parametros       Json // config efetiva usada no treino
+  metricas         Json?
+  log              String    @default("") @db.Text
+  artefatos        Json      @default("[]") // Artefato[] (ver CONTRATOS-MODELOS.md)
+  externoId        String? // id do job no provedor (OpenAI)
+  modeloResultante String? // "ft:..." (OpenAI) ou nome no Ollama (LLM_LOCAL)
+  publicado        Boolean   @default(false) // versão escolhida para uso
+  criadoEm         DateTime  @default(now())
+  iniciadoEm       DateTime?
+  finalizadoEm     DateTime?
+
+  @@unique([modeloId, numero])
 }
