@@ -1,6 +1,6 @@
 fastapi==0.115.0
 uvicorn==0.30.6
 platformio==6.1.16
-esptool==4.8.1
+esptool==5.6.0
 httpx==0.27.2
 pytest==8.3.2
