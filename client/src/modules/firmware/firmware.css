@@ -1,0 +1,480 @@
+/* ---------- Estados e textos auxiliares ---------- */
+
+.firmware-vazio {
+  color: var(--cor-texto-suave);
+  padding: 1rem 0;
+}
+
+.firmware-texto {
+  color: var(--cor-texto-suave);
+  margin: 0 0 0.75rem;
+}
+
+.firmware-meta {
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.firmware-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.firmware-acoes-modal {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.firmware-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.firmware-dl dt {
+  color: var(--cor-texto-suave);
+}
+
+.firmware-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.firmware-filtro {
+  max-width: 320px;
+  margin-bottom: 1rem;
+}
+
+/* ---------- Cartões (grade de projetos e dispositivos) ---------- */
+
+.firmware-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 1rem 1.1rem;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--sombra);
+  min-width: 0;
+}
+
+a.firmware-card:hover {
+  border-color: var(--cor-primaria);
+}
+
+.firmware-card-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.firmware-card-titulo {
+  font-size: 1.05rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.firmware-card-descricao {
+  margin: 0;
+  color: var(--cor-texto-suave);
+  font-size: 0.9rem;
+}
+
+.firmware-card-rodape {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ---------- Editor de projeto (layout tipo IDE) ---------- */
+
+.firmware-projeto-cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.firmware-projeto-cabecalho h1 {
+  margin: 0.25rem 0;
+}
+
+.firmware-voltar {
+  font-size: 0.9rem;
+  color: var(--cor-primaria);
+  text-decoration: none;
+}
+
+.firmware-projeto-placa {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.firmware-ide {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.firmware-coluna-editor,
+.firmware-coluna-arvore,
+.firmware-coluna-painel {
+  min-width: 0;
+}
+
+.firmware-coluna-painel .cartao {
+  margin: 0;
+}
+
+/* Árvore de arquivos */
+
+.firmware-arvore {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 0.6rem;
+}
+
+.firmware-arvore-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  padding: 0 0.2rem;
+}
+
+.firmware-arvore-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.firmware-arvore-item {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding-right: 0.2rem;
+}
+
+.firmware-arvore-item .firmware-arvore-linha {
+  flex: 1;
+  min-width: 0;
+}
+
+.firmware-arvore-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: var(--raio-pequeno);
+  background: transparent;
+  color: var(--cor-texto);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.firmware-arvore-linha:hover {
+  background: var(--cor-primaria-suave);
+}
+
+.firmware-arvore-linha.ativo,
+.firmware-arquivo.ativo {
+  background: var(--cor-primaria-suave);
+  color: var(--cor-primaria);
+  font-weight: 600;
+}
+
+.firmware-arvore-pasta {
+  font-weight: 600;
+}
+
+.firmware-seta {
+  width: 0.8rem;
+  color: var(--cor-texto-suave);
+}
+
+.firmware-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.firmware-arvore-acoes {
+  display: flex;
+  gap: 0.1rem;
+  flex-shrink: 0;
+}
+
+.firmware-icone-botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 0;
+  border-radius: var(--raio-pequeno);
+  background: transparent;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+
+.firmware-icone-botao:hover {
+  background: var(--cor-primaria-suave);
+  color: var(--cor-primaria);
+}
+
+.firmware-icone-botao.perigo:hover {
+  color: var(--cor-perigo);
+}
+
+/* Editor de código */
+
+.firmware-editor-codigo {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.firmware-editor-barra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--cor-borda);
+  font-size: 0.85rem;
+}
+
+.firmware-caminho {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.firmware-nao-salvo {
+  color: var(--cor-aviso);
+  white-space: nowrap;
+}
+
+.firmware-salvo {
+  color: var(--cor-texto-suave);
+  white-space: nowrap;
+}
+
+.firmware-editor-corpo {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 60vh;
+  max-height: 80vh;
+}
+
+.firmware-numeros {
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 0.6rem 0.5rem 0.6rem 0.6rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--cor-texto-suave);
+  background: var(--cor-fundo);
+  border-right: 1px solid var(--cor-borda);
+  user-select: none;
+  min-width: 2.8rem;
+}
+
+.firmware-textarea {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}
+
+/* Painel de compilação */
+
+.firmware-build {
+  margin-top: 0.9rem;
+}
+
+.firmware-build-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.firmware-log {
+  margin: 0.5rem 0 0;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  padding: 0.6rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.firmware-gravar {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--cor-borda);
+}
+
+.firmware-gravar h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+/* ---------- Gravador ---------- */
+
+.firmware-gravador {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.firmware-gravador .cartao {
+  margin: 0;
+}
+
+.firmware-gravador code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.firmware-progresso {
+  position: relative;
+  margin-top: 0.7rem;
+  height: 1.4rem;
+  background: var(--cor-superficie-2, var(--cor-fundo));
+  border: 1px solid var(--cor-borda);
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 0.8rem;
+}
+
+.firmware-progresso-barra {
+  height: 100%;
+  background: var(--cor-primaria);
+  transition: width 0.2s ease;
+}
+
+.firmware-progresso span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.firmware-passos {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.firmware-linha-gravar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.firmware-linha-gravar .campo {
+  flex: 1;
+  min-width: 180px;
+}
+
+.firmware-detalhe-build {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ---------- Telas largas: IDE em três colunas ---------- */
+
+@media (min-width: 1100px) {
+  .firmware-ide {
+    grid-template-columns: 250px minmax(0, 1fr) 340px;
+  }
+
+  .firmware-projeto-cabecalho {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .firmware-coluna-arvore,
+  .firmware-coluna-painel {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+@media (max-width: 1099px) {
+  .firmware-editor-corpo {
+    height: 50vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .firmware-dl {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+
+  .firmware-dl dd {
+    margin-bottom: 0.5rem;
+  }
+}

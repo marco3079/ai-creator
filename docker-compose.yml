@@ -1,0 +1,92 @@
+# AI Creator: orquestração dos serviços.
+# Suba com: bash instalar.sh (Linux/macOS) ou .\instalar.ps1 (Windows).
+# Manual: docker compose up -d --build
+name: ai-creator
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aicreator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aicreator}
+      POSTGRES_DB: aicreator
+    volumes:
+      - dados_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aicreator -d aicreator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "3333"
+      DATABASE_URL: "postgresql://aicreator:${POSTGRES_PASSWORD:-aicreator}@db:5432/aicreator?schema=public"
+      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
+      DATA_DIR: /data
+      TRAINER_URL: http://trainer:8001
+      BUILDER_URL: http://builder:8002
+      SERVER_URL_INTERNO: http://server:3333
+      INTERNO_TOKEN: ${INTERNO_TOKEN:-troque-token-interno}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OLLAMA_URL: http://ollama:11434
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@aicreator.local}
+      ADMIN_SENHA: ${ADMIN_SENHA:-trocar123}
+    volumes:
+      - dados:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3333/api/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  client:
+    build: ./client
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped
+
+  trainer:
+    build: ./trainer
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - dados:/data
+    restart: unless-stopped
+
+  builder:
+    build: ./builder
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - dados:/data
+      - platformio:/root/.platformio
+    # Gravação pelo servidor exige o USB mapeado no container (só Linux).
+    # Descomente e ajuste a porta do seu dispositivo:
+    # devices:
+    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.6.8
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  dados_db:
+  dados:
+  platformio:
+  ollama:

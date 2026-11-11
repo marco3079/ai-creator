@@ -1,0 +1,213 @@
+{
+  "name": "ai-creator",
+  "displayName": "AI Creator",
+  "description": "Gerencie agentes, projetos de firmware e builds do AI Creator direto no VS Code.",
+  "version": "0.1.0",
+  "publisher": "marco3079",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "ai-creator",
+    "tinyml",
+    "platformio",
+    "agentes",
+    "claude"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aiCreator",
+          "title": "AI Creator",
+          "icon": "media/icone.svg"
+        }
+      ]
+    },
+    "views": {
+      "aiCreator": [
+        {
+          "id": "aiCreator.agentes",
+          "name": "Agentes"
+        },
+        {
+          "id": "aiCreator.projetos",
+          "name": "Projetos"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "aiCreator.agentes",
+        "contents": "Configure o token de API do AI Creator para ver seus agentes.\n[Configurar token](command:aiCreator.configurarToken)"
+      },
+      {
+        "view": "aiCreator.projetos",
+        "contents": "Configure o token de API do AI Creator para ver seus projetos.\n[Configurar token](command:aiCreator.configurarToken)"
+      }
+    ],
+    "configuration": {
+      "title": "AI Creator",
+      "properties": {
+        "aiCreator.url": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "Endereço base do AI Creator (as chamadas vão para <url>/api/...)."
+        },
+        "aiCreator.pastaProjetos": {
+          "type": "string",
+          "default": "ai-creator",
+          "description": "Pasta dentro do workspace onde os projetos de firmware são baixados."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "aiCreator.configurarToken",
+        "title": "AI Creator: Configurar token de API",
+        "icon": "$(key)"
+      },
+      {
+        "command": "aiCreator.atualizar",
+        "title": "AI Creator: Atualizar listas",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "aiCreator.baixarAgente",
+        "title": "AI Creator: Baixar agente",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "aiCreator.enviarAgente",
+        "title": "AI Creator: Enviar agente",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "aiCreator.baixarProjeto",
+        "title": "AI Creator: Baixar projeto",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "aiCreator.enviarProjeto",
+        "title": "AI Creator: Enviar projeto",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "aiCreator.compilar",
+        "title": "AI Creator: Compilar projeto",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "aiCreator.gravarLocal",
+        "title": "AI Creator: Gravar na placa (PlatformIO local)",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "aiCreator.abrirNoNavegador",
+        "title": "AI Creator: Abrir no navegador",
+        "icon": "$(link-external)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "aiCreator.atualizar",
+          "when": "view == aiCreator.agentes || view == aiCreator.projetos",
+          "group": "navigation"
+        },
+        {
+          "command": "aiCreator.baixarAgente",
+          "when": "view == aiCreator.agentes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiCreator.baixarProjeto",
+          "when": "view == aiCreator.projetos",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiCreator.configurarToken",
+          "when": "view == aiCreator.agentes || view == aiCreator.projetos",
+          "group": "navigation@9"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "aiCreator.baixarAgente",
+          "when": "view == aiCreator.agentes && viewItem == agente",
+          "group": "1_acoes@1"
+        },
+        {
+          "command": "aiCreator.abrirNoNavegador",
+          "when": "view == aiCreator.agentes && viewItem == agente",
+          "group": "2_geral@1"
+        },
+        {
+          "command": "aiCreator.baixarProjeto",
+          "when": "view == aiCreator.projetos && viewItem == projeto",
+          "group": "1_acoes@1"
+        },
+        {
+          "command": "aiCreator.compilar",
+          "when": "view == aiCreator.projetos && viewItem == projeto",
+          "group": "1_acoes@2"
+        },
+        {
+          "command": "aiCreator.gravarLocal",
+          "when": "view == aiCreator.projetos && viewItem == projeto",
+          "group": "1_acoes@3"
+        },
+        {
+          "command": "aiCreator.enviarProjeto",
+          "when": "view == aiCreator.projetos && viewItem == projeto",
+          "group": "1_acoes@4"
+        },
+        {
+          "command": "aiCreator.abrirNoNavegador",
+          "when": "view == aiCreator.projetos && viewItem == projeto",
+          "group": "2_geral@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "aiCreator.enviarAgente",
+          "when": "resourceExtname == .md && resourcePath =~ /[\\\\/]\\.claude[\\\\/]agents[\\\\/]/",
+          "group": "aiCreator@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "aiCreator.enviarAgente",
+          "when": "resourceExtname == .md && resourcePath =~ /[\\\\/]\\.claude[\\\\/]agents[\\\\/]/",
+          "group": "aiCreator@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "aiCreator.enviarAgente",
+          "when": "resourceExtname == .md && resourcePath =~ /[\\\\/]\\.claude[\\\\/]agents[\\\\/]/"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/vscode": "1.90.0",
+    "@types/node": "20.17.6",
+    "@vscode/vsce": "3.2.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marco3079/ai-creator.git"
+  }
+}

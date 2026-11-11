@@ -1,0 +1,13 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.ps1 eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.bin binary
+*.tflite binary
+*.vsix binary
+*.uf2 binary

@@ -1,0 +1,60 @@
+name: "Relatar um defeito"
+description: "Algo da plataforma não funciona como deveria."
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Obrigado por relatar o defeito. **Não cole senhas, chaves de API, tokens `aic_` nem o conteúdo do arquivo `.env` nesta issue.**"
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: "O que aconteceu?"
+      description: "Descreva o comportamento que você viu."
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: "O que era esperado?"
+      description: "Descreva o comportamento que você esperava."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduzir
+    attributes:
+      label: "Passos para reproduzir"
+      description: "Liste os passos em ordem, a partir da tela de entrada."
+      placeholder: "1. Entrar como ...\n2. Abrir ...\n3. Clicar em ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Área"
+      description: "Em qual parte da plataforma o defeito aconteceu?"
+      options:
+        - "Agentes LLM"
+        - "Agentes TinyML"
+        - "Datasets e treinos"
+        - "Projetos e firmware"
+        - "Gravação de placa"
+        - "Extensão do VS Code"
+        - "Claude Code (plugin e MCP)"
+        - "Sistema (usuários, tokens, logs)"
+        - "Instalação e Docker"
+    validations:
+      required: true
+  - type: input
+    id: ambiente
+    attributes:
+      label: "Navegador ou sistema"
+      description: "Por exemplo: Chrome no Windows 11, ou Safari no iPhone."
+    validations:
+      required: false
+  - type: textarea
+    id: anexos
+    attributes:
+      label: "Prints ou logs"
+      description: "Arraste imagens para esta área. Não inclua senhas, tokens, chaves de API nem o conteúdo do .env."
+    validations:
+      required: false

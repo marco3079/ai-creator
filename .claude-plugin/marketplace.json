@@ -1,0 +1,13 @@
+{
+  "name": "ai-creator",
+  "owner": {
+    "name": "marco3079"
+  },
+  "plugins": [
+    {
+      "name": "ai-creator",
+      "source": "./integrations/claude-code",
+      "description": "Agentes LLM e TinyML, projetos de firmware e compilação pela plataforma AI Creator, direto no Claude Code."
+    }
+  ]
+}

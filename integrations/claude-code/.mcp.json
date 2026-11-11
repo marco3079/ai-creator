@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ai-creator": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/index.js"],
+      "env": {
+        "AI_CREATOR_URL": "${AI_CREATOR_URL}",
+        "AI_CREATOR_TOKEN": "${AI_CREATOR_TOKEN}"
+      }
+    }
+  }
+}

@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    name: Servidor (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Gerar cliente Prisma
+        run: npx prisma generate
+      - name: Verificar tipos
+        run: npx tsc --noEmit
+
+  client:
+    name: Cliente (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências
+        run: npm install
+      - name: Gerar build
+        run: npm run build
+
+  trainer:
+    name: Trainer (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trainer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependências de teste
+        run: pip install pytest numpy
+      - name: Testar exportação
+        run: python -m pytest tests/test_exportar.py
+
+  builder:
+    name: Builder (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: builder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependências de teste
+        run: pip install pytest
+      - name: Rodar testes
+        run: python -m pytest
+
+  vscode:
+    name: Extensão VS Code
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extensions/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar e compilar
+        run: npm install && npm run compile
+
+  mcp:
+    name: Servidor MCP (Claude Code)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/claude-code/mcp-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar e compilar
+        run: npm install && npm run build
+
+  docker:
+    name: Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar docker-compose.yml
+        run: docker compose config -q

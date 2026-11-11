@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="260" viewBox="0 0 320 260" fill="none">
+  <!-- Placa de circuito isométrica (tema claro): fundo verde-azulado com trilhas e componentes. -->
+  <polygon points="160,30 300,105 160,180 20,105" fill="#dbeafe" stroke="#2563eb" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="20,105 160,180 160,230 20,155" fill="#bfdbfe" stroke="#2563eb" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="160,180 300,105 300,155 160,230" fill="#93c5fd" stroke="#2563eb" stroke-width="3" stroke-linejoin="round"/>
+  <g stroke="#1d4ed8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M70 105L120 76L170 105"/>
+    <path d="M200 90L240 113L240 150"/>
+    <path d="M100 135L100 165L140 188"/>
+    <path d="M180 150L210 167L250 144"/>
+  </g>
+  <g fill="#2563eb">
+    <circle cx="70" cy="105" r="5"/>
+    <circle cx="170" cy="105" r="5"/>
+    <circle cx="240" cy="150" r="5"/>
+    <circle cx="140" cy="188" r="5"/>
+  </g>
+  <!-- Chip central -->
+  <polygon points="150,110 190,132 150,154 110,132" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="2" stroke-linejoin="round"/>
+  <polygon points="150,118 180,133 150,148 120,133" fill="#3b82f6"/>
+  <g stroke="#1e3a8a" stroke-width="3" stroke-linecap="round">
+    <path d="M118 124L108 119M126 116L120 107M182 142L192 147M174 150L180 159"/>
+  </g>
+</svg>

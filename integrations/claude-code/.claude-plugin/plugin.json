@@ -1,0 +1,8 @@
+{
+  "name": "ai-creator",
+  "version": "0.1.0",
+  "description": "Integra o Claude Code ao AI Creator: agentes LLM como subagentes, compilação e gravação de projetos de firmware e treino de agentes TinyML.",
+  "author": {
+    "name": "marco3079"
+  }
+}

@@ -1,0 +1,163 @@
+/* Estilos da área TinyML (formulário, treino, matriz de confusão e datasets). */
+
+.tinyml-formulario,
+.tinyml-treino {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tinyml-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.tinyml-linha > .campo {
+  flex: 1 1 220px;
+}
+
+.tinyml-ajuda {
+  color: var(--cor-texto-suave);
+  font-size: 0.9em;
+  margin: 6px 0 0;
+}
+
+.tinyml-subtitulo {
+  font-size: 1rem;
+  margin: 16px 0 8px;
+}
+
+.tinyml-estimativa {
+  margin: 12px 0 0;
+  font-weight: 600;
+}
+
+.tinyml-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tinyml-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--cor-primaria-suave);
+  color: var(--cor-texto);
+}
+
+.tinyml-chip-remover {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1em;
+  line-height: 1;
+  padding: 0;
+}
+
+.tinyml-lista-treinos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tinyml-treino-item {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  cursor: pointer;
+  text-align: left;
+}
+
+.tinyml-treino-ativo {
+  border-color: var(--cor-primaria);
+  box-shadow: 0 0 0 1px var(--cor-primaria);
+}
+
+.tinyml-log {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tinyml-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.tinyml-metricas div {
+  padding: 10px 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+}
+
+.tinyml-metricas dt {
+  color: var(--cor-texto-suave);
+  font-size: 0.85em;
+}
+
+.tinyml-metricas dd {
+  margin: 4px 0 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.tinyml-matriz-rolagem {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tinyml-matriz {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.tinyml-matriz th,
+.tinyml-matriz td {
+  border: 1px solid var(--cor-borda);
+  padding: 6px 10px;
+  text-align: center;
+  min-width: 72px;
+}
+
+.tinyml-matriz-celula span {
+  display: block;
+}
+
+.tinyml-matriz-pct {
+  color: var(--cor-texto-suave);
+  font-size: 0.8em;
+}
+
+.tinyml-acoes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

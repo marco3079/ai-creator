@@ -1,0 +1,42 @@
+name: "Sugerir uma melhoria"
+description: "Uma funcionalidade nova ou um ajuste em algo que já existe."
+labels: ["melhoria"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: "Qual problema a melhoria resolve?"
+      description: "Descreva a situação do dia a dia que hoje fica difícil ou impossível."
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: "Como você imagina a solução?"
+      description: "Descreva a mudança desejada, com exemplos de uso se ajudar."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Área"
+      options:
+        - "Agentes LLM"
+        - "Agentes TinyML"
+        - "Datasets e treinos"
+        - "Projetos e firmware"
+        - "Gravação de placa"
+        - "Extensão do VS Code"
+        - "Claude Code (plugin e MCP)"
+        - "Sistema (usuários, tokens, logs)"
+        - "Instalação e Docker"
+        - "Documentação"
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: "Alternativas já consideradas"
+      description: "Outras formas de resolver o problema, se você pensou em alguma."
+    validations:
+      required: false

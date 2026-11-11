@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ai-creator": {
+      "command": "node",
+      "args": ["integrations/claude-code/mcp-server/dist/index.js"],
+      "env": {
+        "AI_CREATOR_URL": "http://localhost:8080",
+        "AI_CREATOR_TOKEN": "aic_coloque_seu_token_aqui"
+      }
+    }
+  }
+}

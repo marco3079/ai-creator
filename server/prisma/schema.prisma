@@ -1,0 +1,220 @@
+// AI Creator — esquema do banco (PostgreSQL). Fonte de verdade: docs/plano/CONTRATOS.md
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Perfil {
+  ADMIN
+  DEV
+  LEITOR
+}
+
+enum TipoAgente {
+  LLM
+  TINYML
+}
+
+enum Provedor {
+  ANTHROPIC
+  OPENAI
+  OLLAMA
+}
+
+enum StatusJob {
+  FILA
+  EXECUTANDO
+  SUCESSO
+  FALHA
+  CANCELADO
+}
+
+enum Placa {
+  ESP32
+  ESP32S3
+  ARDUINO_NANO33BLE
+  ARDUINO_UNO
+  STM32_NUCLEO_F401RE
+  RP2040_PICO
+}
+
+model Usuario {
+  id        Int        @id @default(autoincrement())
+  nome      String
+  email     String     @unique
+  senhaHash String
+  perfil    Perfil     @default(DEV)
+  ativo     Boolean    @default(true)
+  criadoEm  DateTime   @default(now())
+  tokens    TokenApi[]
+  agentes   Agente[]   @relation("AutorAgente")
+  logs      Log[]
+}
+
+// Token pessoal para o plugin do VS Code e o MCP do Claude Code. Guardado só o hash (sha256).
+model TokenApi {
+  id        Int       @id @default(autoincrement())
+  usuarioId Int
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  nome      String
+  prefixo   String // primeiros 12 caracteres, para mostrar na tela
+  hash      String    @unique
+  criadoEm  DateTime  @default(now())
+  ultimoUso DateTime?
+  revogado  Boolean   @default(false)
+}
+
+model Projeto {
+  id           Int              @id @default(autoincrement())
+  nome         String
+  slug         String           @unique
+  descricao    String           @default("")
+  placa        Placa            @default(ESP32)
+  framework    String           @default("arduino")
+  criadoEm     DateTime         @default(now())
+  atualizadoEm DateTime         @updatedAt
+  arquivos     ArquivoProjeto[]
+  agentes      Agente[]
+  builds       Build[]
+}
+
+model ArquivoProjeto {
+  id           Int      @id @default(autoincrement())
+  projetoId    Int
+  projeto      Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  caminho      String // relativo à raiz do projeto, com "/" (ex.: "src/main.cpp")
+  conteudo     String   @db.Text
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([projetoId, caminho])
+}
+
+model Agente {
+  id            Int            @id @default(autoincrement())
+  nome          String
+  slug          String         @unique
+  descricao     String         @default("")
+  tipo          TipoAgente
+  tags          String[]       @default([])
+  projetoId     Int?
+  projeto       Projeto?       @relation(fields: [projetoId], references: [id], onDelete: SetNull)
+  autorId       Int?
+  autor         Usuario?       @relation("AutorAgente", fields: [autorId], references: [id], onDelete: SetNull)
+  // --- Agente LLM ---
+  provedor      Provedor?
+  modelo        String?
+  promptSistema String?        @db.Text
+  esforco       String? // ANTHROPIC: low | medium | high | xhigh | max
+  temperatura   Float? // OPENAI / OLLAMA
+  maxTokens     Int?
+  ferramentas   Json           @default("[]") // string[] com nomes de ferramentas (formato Claude Code)
+  // --- Agente TinyML ---
+  configTinyml  Json? // ConfigTinyml (ver CONTRATOS.md)
+  versao        Int            @default(1)
+  criadoEm      DateTime       @default(now())
+  atualizadoEm  DateTime       @updatedAt
+  versoes       VersaoAgente[]
+  conversas     Conversa[]
+  treinos       Treino[]
+}
+
+model VersaoAgente {
+  id       Int      @id @default(autoincrement())
+  agenteId Int
+  agente   Agente   @relation(fields: [agenteId], references: [id], onDelete: Cascade)
+  versao   Int
+  snapshot Json
+  nota     String   @default("")
+  criadoEm DateTime @default(now())
+
+  @@unique([agenteId, versao])
+}
+
+model Conversa {
+  id           Int      @id @default(autoincrement())
+  agenteId     Int
+  agente       Agente   @relation(fields: [agenteId], references: [id], onDelete: Cascade)
+  usuarioId    Int?
+  titulo       String
+  mensagens    Json     @default("[]") // { role: 'user' | 'assistant', content: string }[]
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
+model Dataset {
+  id             Int      @id @default(autoincrement())
+  nome           String
+  descricao      String   @default("")
+  tipo           String // SERIE_TEMPORAL | AUDIO | TABELA
+  classes        String[] @default([])
+  janela         Int      @default(0)
+  caminhoArquivo String // relativo a DATA_DIR (ex.: "datasets/3.csv")
+  amostras       Int      @default(0)
+  colunas        Int      @default(0) // nº de colunas de atributos (sem o rótulo)
+  criadoEm       DateTime @default(now())
+  treinos        Treino[]
+}
+
+model Treino {
+  id           Int       @id @default(autoincrement())
+  agenteId     Int
+  agente       Agente    @relation(fields: [agenteId], references: [id], onDelete: Cascade)
+  datasetId    Int
+  dataset      Dataset   @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  status       StatusJob @default(FILA)
+  parametros   Json
+  metricas     Json? // { acuracia, perda, acuraciaValidacao, matrizConfusao: number[][], classes: string[] }
+  log          String    @default("") @db.Text
+  modeloTflite String? // relativo a DATA_DIR (ex.: "treinos/7/model.tflite")
+  modeloH      String? // relativo a DATA_DIR (ex.: "treinos/7/model_data.h")
+  tamanhoBytes Int?
+  criadoEm     DateTime  @default(now())
+  iniciadoEm   DateTime?
+  finalizadoEm DateTime?
+}
+
+model Build {
+  id           Int       @id @default(autoincrement())
+  projetoId    Int
+  projeto      Projeto   @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  placa        Placa
+  agenteId     Int? // agente TinyML cujo modelo foi embutido (include/model_data.h)
+  status       StatusJob @default(FILA)
+  log          String    @default("") @db.Text
+  artefato     String? // relativo a DATA_DIR (ex.: "builds/12/firmware.bin")
+  offset       String? // endereço de gravação (ex.: "0x0" para ESP32 merged)
+  tamanhoBytes Int?
+  criadoEm     DateTime  @default(now())
+  finalizadoEm DateTime?
+}
+
+model Dispositivo {
+  id             Int       @id @default(autoincrement())
+  nome           String
+  placa          Placa
+  porta          String    @default("")
+  notas          String    @default("")
+  ultimoBuildId  Int?
+  ultimaGravacao DateTime?
+  criadoEm       DateTime  @default(now())
+}
+
+model Log {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  acao      String
+  detalhe   String   @default("")
+  criadoEm  DateTime @default(now())
+}
+
+model Plataforma {
+  id          Int    @id @default(1)
+  nome        String @default("AI Creator")
+  slogan      String @default("Do prompt ao microcontrolador.")
+  corPrimaria String @default("#2563eb")
+}

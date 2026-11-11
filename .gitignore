@@ -1,0 +1,14 @@
+node_modules/
+dist/
+!integrations/claude-code/mcp-server/dist/
+out/
+.env
+dados/
+.pio/
+__pycache__/
+*.vsix
+.DS_Store
+
+# Ferramentas locais do Claude Code (como no sistema-escolar)
+.claude/
+CLAUDE.md

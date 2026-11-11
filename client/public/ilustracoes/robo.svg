@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none">
+  <!-- Robozinho para o cartão da barra lateral. -->
+  <line x1="48" y1="10" x2="48" y2="22" stroke="#2563eb" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="48" cy="8" r="6" fill="#2563eb"/>
+  <rect x="20" y="22" width="56" height="44" rx="12" fill="#2563eb"/>
+  <rect x="30" y="34" width="12" height="12" rx="3" fill="#ffffff"/>
+  <rect x="54" y="34" width="12" height="12" rx="3" fill="#ffffff"/>
+  <rect x="36" y="52" width="24" height="5" rx="2.5" fill="#bfdbfe"/>
+  <rect x="26" y="68" width="44" height="22" rx="8" fill="#1d4ed8"/>
+  <circle cx="48" cy="79" r="4" fill="#93c5fd"/>
+</svg>
