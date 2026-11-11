@@ -1,4 +1,9 @@
-<p align="center"><strong>AI Creator</strong></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/imagens/logo-escuro.png">
+    <img src="docs/imagens/logo-claro.png" alt="AI Creator" width="460">
+  </picture>
+</p>
 
 <p align="center">Crie, versione e execute agentes de IA e classificadores TinyML, e leve o firmware até a placa, em um único app web.</p>
 
@@ -15,12 +20,13 @@
   <img src="https://img.shields.io/badge/Claude-D97757?logo=anthropic&logoColor=white" alt="Claude">
 </p>
 
-<!-- TODO: captura -->
+<p align="center"><img src="docs/imagens/painel-claro.png" alt="Painel inicial do AI Creator" width="900"></p>
 
 ## Sumário
 
 - [Visão geral](#visão-geral)
 - [Recursos](#recursos)
+- [Telas](#telas)
 - [Placas suportadas](#placas-suportadas)
 - [Arquitetura](#arquitetura)
 - [Início rápido](#início-rápido)
@@ -57,6 +63,50 @@ Quem trabalha no computador pode usar a extensão do VS Code e o servidor MCP co
 - **Visual**: tema claro e escuro, painel com indicadores, uso no celular e instalação como app (PWA).
 
 Os detalhes de cada parte estão em [docs/TINYML.md](docs/TINYML.md), [docs/FIRMWARE.md](docs/FIRMWARE.md) e [docs/INTEGRACOES.md](docs/INTEGRACOES.md).
+
+## Telas
+
+<p align="center"><img src="docs/imagens/painel-escuro.png" alt="Painel no tema escuro" width="900"></p>
+<p align="center"><em>Painel inicial no tema escuro: agentes, projetos, compilações dos últimos 14 dias e atalhos.</em></p>
+
+<p align="center"><img src="docs/imagens/agentes-llm.png" alt="Lista de agentes LLM" width="900"></p>
+<p align="center"><em>Agentes LLM em cartões, com provedor, modelo, versão e menu de ações.</em></p>
+
+<p align="center"><img src="docs/imagens/editor-agente.png" alt="Editor de agente LLM" width="900"></p>
+<p align="center"><em>Editor de agente LLM: provedor, modelo, esforço, prompt de sistema e ferramentas no formato do Claude Code.</em></p>
+
+<p align="center"><img src="docs/imagens/tinyml-config.png" alt="Configuração de agente TinyML" width="900"></p>
+<p align="center"><em>Agente TinyML: entrada do sensor, classes, arquitetura, quantização e estimativa de tamanho para a placa.</em></p>
+
+<p align="center"><img src="docs/imagens/tinyml-treino.png" alt="Treino de modelo TinyML" width="900"></p>
+<p align="center"><em>Resultado de um treino: log por época, métricas, matriz de confusão e download do .tflite e do model_data.h.</em></p>
+
+<p align="center"><img src="docs/imagens/projeto-editor.png" alt="Editor de projeto de firmware" width="900"></p>
+<p align="center"><em>Projeto PlatformIO: árvore de arquivos, editor, compilação com modelo TinyML embutido e gravação.</em></p>
+
+<p align="center"><img src="docs/imagens/compilacoes.png" alt="Lista de compilações" width="900"></p>
+<p align="center"><em>Histórico de compilações com status, placa e tamanho do firmware.</em></p>
+
+<p align="center"><img src="docs/imagens/datasets.png" alt="Datasets" width="900"></p>
+<p align="center"><em>Datasets em CSV com classes, amostras e prévia.</em></p>
+
+<p align="center"><img src="docs/imagens/dispositivos.png" alt="Dispositivos" width="900"></p>
+<p align="center"><em>Dispositivos cadastrados, com placa, porta e última gravação.</em></p>
+
+<p align="center"><img src="docs/imagens/integracoes.png" alt="Integrações com VS Code e Claude Code" width="900"></p>
+<p align="center"><em>Passo a passo para conectar a extensão do VS Code e o MCP do Claude Code.</em></p>
+
+<p align="center"><img src="docs/imagens/login.png" alt="Tela de login" width="900"></p>
+<p align="center"><em>Tela de entrada.</em></p>
+
+<p align="center">
+  <img src="docs/imagens/painel-celular.png" alt="Painel no celular" width="280">
+  &nbsp;&nbsp;
+  <img src="docs/imagens/agentes-celular.png" alt="Agentes no celular" width="280">
+</p>
+<p align="center"><em>No celular: barra inferior com os atalhos principais e menu completo na gaveta.</em></p>
+
+Os dados mostrados nas telas são de demonstração (criados pelo seed e pelo exemplo `exemplos/datasets/gestos.csv`).
 
 ## Placas suportadas
 
@@ -147,7 +197,7 @@ Os valores padrão são:
 - **E-mail:** `admin@aicreator.local`
 - **Senha:** `trocar123`
 
-Entre no endereço do site (por padrão `http://localhost:8080`) e troque a senha em **Meu perfil** logo no primeiro acesso.
+Entre no endereço do site (por padrão `http://localhost:8080`) e troque a senha do administrador em **Sistema → Usuários** logo no primeiro acesso.
 
 ## Configuração
 
