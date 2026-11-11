@@ -143,7 +143,11 @@ export function Painel() {
           {dados &&
             (temCompilacao ? (
               <div className="painel-grafico-corpo">
-                <GraficoLinha pontos={pontos} />
+                <GraficoLinha
+                  pontos={pontos}
+                  maximo={Math.max(4, ...pontos.map((p) => p.valor ?? 0))}
+                  formatar={(v) => (Number.isInteger(v) ? String(v) : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }))}
+                />
               </div>
             ) : (
               <p className="painel-vazio">Nenhuma compilação com sucesso nos últimos 14 dias.</p>

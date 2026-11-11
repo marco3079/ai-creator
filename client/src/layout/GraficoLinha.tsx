@@ -17,7 +17,17 @@ function formatarPercentual(valor: number): string {
   return `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
-export function GraficoLinha({ pontos }: { pontos: PontoGrafico[] }) {
+// Escala: padrão 0–100 com "%"; para contagens, passe `maximo` (ou deixe calcular) e `formatar`.
+export function GraficoLinha({
+  pontos,
+  maximo,
+  formatar = formatarPercentual,
+}: {
+  pontos: PontoGrafico[];
+  maximo?: number;
+  formatar?: (valor: number) => string;
+}) {
+  const topo = maximo ?? 100;
   // Id único por instância; os dois-pontos do useId são trocados para a referência url(#...) ficar válida.
   const id = 'painel-degrade-' + useId().replace(/:/g, '');
   const ref = useRef<HTMLDivElement>(null);
@@ -53,8 +63,8 @@ export function GraficoLinha({ pontos }: { pontos: PontoGrafico[] }) {
     n <= 1 ? (X_ESQ + X_DIR) / 2 : X_ESQ + (i * (X_DIR - X_ESQ)) / (n - 1);
 
   const yDe = (valor: number): number => {
-    const limitado = Math.min(100, Math.max(0, valor));
-    return Y_BASE - (limitado / 100) * (Y_BASE - Y_TOPO);
+    const limitado = Math.min(topo, Math.max(0, valor));
+    return Y_BASE - (limitado / topo) * (Y_BASE - Y_TOPO);
   };
 
   // Só os pontos com valor; buracos (null) são pulados e a linha segue para o próximo valor.
@@ -70,21 +80,21 @@ export function GraficoLinha({ pontos }: { pontos: PontoGrafico[] }) {
 
   let balao = null;
   if (ultimo) {
-    const texto = formatarPercentual(ultimo.valor);
+    const texto = formatar(ultimo.valor);
     const largura = Math.max(48, texto.length * 8 + 16);
     const altura = 24;
     // Centralizado sobre o ponto, mas preso entre 4 e a largura do desenho.
     const esquerda = Math.min(Math.max(ultimo.x - largura / 2, 4), larguraDesenho - 4 - largura);
-    // Acima do ponto; se não couber no topo (100%), fica abaixo.
-    let topo = ultimo.y - 12 - altura;
-    if (topo < 2) topo = ultimo.y + 12;
+    // Acima do ponto; se não couber no topo do desenho, fica abaixo.
+    let topoBalao = ultimo.y - 12 - altura;
+    if (topoBalao < 2) topoBalao = ultimo.y + 12;
     balao = (
       <g>
-        <rect className="painel-grafico-balao" x={esquerda} y={topo} width={largura} height={altura} rx={8} />
+        <rect className="painel-grafico-balao" x={esquerda} y={topoBalao} width={largura} height={altura} rx={8} />
         <text
           className="painel-grafico-balao-texto"
           x={esquerda + largura / 2}
-          y={topo + altura / 2}
+          y={topoBalao + altura / 2}
           textAnchor="middle"
           dominantBaseline="central"
         >
@@ -94,7 +104,7 @@ export function GraficoLinha({ pontos }: { pontos: PontoGrafico[] }) {
     );
   }
 
-  const niveis = [0, 25, 50, 75, 100];
+  const niveis = [0, 0.25, 0.5, 0.75, 1].map((f) => f * topo);
 
   return (
     <div ref={ref} className="painel-grafico-area-medida">
@@ -119,7 +129,7 @@ export function GraficoLinha({ pontos }: { pontos: PontoGrafico[] }) {
             <g key={nivel}>
               <line className="painel-grafico-grade" x1={X_ESQ} x2={X_DIR} y1={y} y2={y} />
               <text className="painel-grafico-eixo" x={X_ESQ - 8} y={y + 4} textAnchor="end">
-                {`${nivel}%`}
+                {formatar(nivel)}
               </text>
             </g>
           );
@@ -145,7 +155,7 @@ export function GraficoLinha({ pontos }: { pontos: PontoGrafico[] }) {
 
         {marcados.map((m, k) => (
           <circle key={k} className="painel-grafico-ponto" cx={m.x} cy={m.y} r={5} strokeWidth={3}>
-            <title>{`${m.rotulo}: ${formatarPercentual(m.valor)}`}</title>
+            <title>{`${m.rotulo}: ${formatar(m.valor)}`}</title>
           </circle>
         ))}
 

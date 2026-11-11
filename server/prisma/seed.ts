@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../src/lib/prisma';
 import { gerarSlug, slugUnico } from '../src/lib/slug';
+import { arquivosModelo } from '../src/modules/projetos/modelos';
 
 // Idempotente: pode rodar várias vezes. Admin e plataforma usam upsert; dados de demonstração
 // só são criados se ainda não houver nenhum agente.
@@ -22,35 +23,6 @@ const CONFIG_TINYML_PADRAO: Prisma.InputJsonObject = {
   datasetId: null,
   ultimoTreinoId: null,
 };
-
-const PLATFORMIO_INI = `[env:principal]
-platform = espressif32
-board = esp32dev
-framework = arduino
-monitor_speed = 115200
-`;
-
-const MAIN_CPP = `#include <Arduino.h>
-
-// LED embutido do ESP32 dev kit (GPIO 2).
-const int PINO_LED = 2;
-
-void setup() {
-  Serial.begin(115200);
-  pinMode(PINO_LED, OUTPUT);
-  Serial.println("Blink ESP32 iniciado");
-}
-
-void loop() {
-  digitalWrite(PINO_LED, HIGH);
-  Serial.println("LED ligado");
-  delay(500);
-
-  digitalWrite(PINO_LED, LOW);
-  Serial.println("LED desligado");
-  delay(500);
-}
-`;
 
 const PROMPT_FIRMWARE = `Você é um assistente especialista em firmware para microcontroladores.
 Ajude a escrever, revisar e depurar código em C++ para ESP32 e outras placas Arduino.
@@ -117,10 +89,8 @@ async function main(): Promise<void> {
       placa: 'ESP32',
       framework: 'arduino',
       arquivos: {
-        create: [
-          { caminho: 'platformio.ini', conteudo: PLATFORMIO_INI },
-          { caminho: 'src/main.cpp', conteudo: MAIN_CPP },
-        ],
+        // Mesmo modelo de arquivos de um projeto novo (já inclui model_data.h quando existir).
+        create: arquivosModelo('ESP32', 'Blink ESP32'),
       },
     },
   });

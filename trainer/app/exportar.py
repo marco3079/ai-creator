@@ -24,6 +24,8 @@ def para_tflite(modelo: Any, x_rep: Any, quantizacao: str) -> bytes:
     if quantizacao not in QUANTIZACOES:
         raise ValueError(f'Quantização desconhecida: {quantizacao}')
 
+    # Keras legado (tf-keras, ativado por TF_USE_LEGACY_KERAS=1): o Keras 3 faz o convert()
+    # INT8 abortar o processo com "LLVM ERROR: Failed to infer result type(s)" no TF 2.16.
     conversor = tf.lite.TFLiteConverter.from_keras_model(modelo)
 
     if quantizacao == 'INT8':

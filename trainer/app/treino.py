@@ -6,6 +6,7 @@ saidaDir e avisa o servidor pelo callback com EXECUTANDO, SUCESSO ou FALHA.
 """
 
 import logging
+import multiprocessing
 import os
 import traceback
 from pathlib import Path
@@ -70,7 +71,37 @@ def _relativo_a_dados(caminho: Path) -> str:
 
 
 def executar(pedido) -> None:
-    """Ponto de entrada do treino em segundo plano. Nunca lança exceção."""
+    """Ponto de entrada do treino em segundo plano. Nunca lança exceção.
+
+    O treino roda em um processo filho (spawn), para que uma falha nativa
+    (ex.: abort do TFLite) não derrube o uvicorn. Se o filho morrer antes de
+    enviar o callback final, o pai envia FALHA.
+    """
+    contexto = multiprocessing.get_context('spawn')
+    terminou = contexto.Value('b', False)
+    processo = contexto.Process(target=_executar_no_processo, args=(pedido, terminou))
+    processo.start()
+    processo.join()
+
+    if processo.exitcode != 0 and not terminou.value:
+        logger.error('Processo do treino %s terminou com código %s', pedido.treinoId, processo.exitcode)
+        _callback(pedido, {
+            'status': 'FALHA',
+            'log': (
+                f'O processo de treino terminou de forma inesperada (código {processo.exitcode}). '
+                'Veja os logs do container trainer.'
+            ),
+        })
+
+
+def _executar_no_processo(pedido, terminou) -> None:
+    try:
+        _executar_local(pedido)
+    finally:
+        terminou.value = True
+
+
+def _executar_local(pedido) -> None:
     registro = Registro(pedido)
     try:
         registro.adicionar(f'Treino {pedido.treinoId} iniciado.')
