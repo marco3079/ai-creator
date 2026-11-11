@@ -201,7 +201,7 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "typescript": "5.6.3",
+    "typescript": "7.0.2",
     "@types/vscode": "1.90.0",
     "@types/node": "20.17.6",
     "@vscode/vsce": "3.2.1"
