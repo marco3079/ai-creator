@@ -85,7 +85,7 @@ export function Layout({ menu }: { menu: RotaModulo[] }) {
       <NavLink
         key={r.caminho}
         to={r.caminho}
-        end={r.caminho === raizPortal}
+        end={r.caminho === raizPortal || r.caminho === '/app/agentes'}
         className={({ isActive }) => (isActive ? 'casca-item casca-ativo' : 'casca-item')}
       >
         <Icone nome={r.icone} tamanho={20} className="casca-item-icone" />

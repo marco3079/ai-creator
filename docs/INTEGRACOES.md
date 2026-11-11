@@ -87,7 +87,7 @@ Dentro do Claude Code:
 /plugin install ai-creator
 ```
 
-O plugin registra o servidor MCP e três comandos. Antes de usar, defina as variáveis `AI_CREATOR_URL` e `AI_CREATOR_TOKEN` no ambiente.
+O plugin registra o servidor MCP e quatro comandos. Antes de usar, defina as variáveis `AI_CREATOR_URL` e `AI_CREATOR_TOKEN` no ambiente.
 
 ### Comandos do plugin
 
@@ -96,6 +96,7 @@ O plugin registra o servidor MCP e três comandos. Antes de usar, defina as vari
 | `/ai-compilar` | Compila o projeto da pasta atual, lendo `.aicreator.json`, e mostra o resultado |
 | `/ai-sincronizar-agentes` | Baixa todos os agentes LLM para `.claude/agents/` e envia os locais que mudaram |
 | `/ai-treinar` | Treina um agente TinyML com um dataset escolhido |
+| `/ai-treinar-modelo` | Treina um modelo (TinyML, tabular, LLM na nuvem ou LLM local), acompanha até o fim e relata as métricas |
 
 ### Ferramentas MCP
 
@@ -116,9 +117,13 @@ O Claude pode usar estas ferramentas diretamente na conversa:
 | `status_build` | Mostra o status de uma compilação |
 | `listar_datasets` | Lista os datasets |
 | `treinar_agente` | Inicia o treino de um agente TinyML com um dataset |
-| `status_treino` | Mostra o status de um treino |
+| `status_treino` | Mostra o status de um treino de agente TinyML |
+| `listar_modelos` | Lista os modelos, com filtros por tipo e busca |
+| `criar_modelo` | Cria um modelo com tipo, tarefa e dataset padrão |
+| `treinar_modelo` | Inicia um treino de modelo (id ou slug) e devolve o treino criado |
+| `status_treino_modelo` | Mostra status, métrica principal, modelo resultante (LLM) e últimas 60 linhas do log de um treino de modelo |
 
-O campo `projeto` aceita o id ou o slug.
+O campo `projeto` aceita o id ou o slug, e o campo `modelo` aceita o id ou o slug do modelo.
 
 ### Exemplo de uso
 

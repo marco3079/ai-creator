@@ -26,6 +26,7 @@
 
 - [Visão geral](#visão-geral)
 - [Recursos](#recursos)
+  - [Modelos](#modelos)
 - [Telas](#telas)
 - [Placas suportadas](#placas-suportadas)
 - [Arquitetura](#arquitetura)
@@ -58,9 +59,15 @@ Quem trabalha no computador pode usar a extensão do VS Code e o servidor MCP co
 - **Datasets e treinos**: importação de CSV com prévia, amostra, download e histórico de treinos.
 - **Firmware**: projetos PlatformIO, editor de arquivos, compilações com log, dispositivos cadastrados, gravação por Web Serial ou pelo servidor.
 - **VS Code**: árvore de agentes e projetos, baixar e enviar, compilar e gravar a placa pelo PlatformIO.
-- **Claude Code e MCP**: ferramentas para listar e editar agentes e arquivos, compilar e treinar, além de comandos de plugin (`/ai-compilar`, `/ai-sincronizar-agentes`, `/ai-treinar`).
+- **Claude Code e MCP**: ferramentas para listar e editar agentes e arquivos, compilar e treinar, além de comandos de plugin (`/ai-compilar`, `/ai-sincronizar-agentes`, `/ai-treinar`, `/ai-treinar-modelo`).
 - **Usuários e acesso**: perfis ADMIN, DEV e LEITOR, tokens de API para integrações e registro de atividades.
 - **Visual**: tema claro e escuro, painel com indicadores, uso no celular e instalação como app (PWA).
+
+### Modelos
+
+Na área **Modelos** você cria um modelo, treina quantas vezes quiser e publica o treino que vai usar. Há quatro tipos: **TinyML** (rede neural para a placa, exporta TFLite INT8 e `model_data.h`), **tabular** (algoritmos do scikit-learn, exporta C quando o algoritmo permite), **LLM na nuvem** (ajuste fino da OpenAI) e **LLM local** (ajuste fino com LoRA numa GPU NVIDIA, registrado no Ollama). Modelos TinyML e tabulares podem ser embutidos no firmware; modelos LLM viram agentes.
+
+Veja o guia completo, com formatos de dataset, exemplos e custos, em [docs/MODELOS.md](docs/MODELOS.md).
 
 Os detalhes de cada parte estão em [docs/TINYML.md](docs/TINYML.md), [docs/FIRMWARE.md](docs/FIRMWARE.md) e [docs/INTEGRACOES.md](docs/INTEGRACOES.md).
 
@@ -83,6 +90,28 @@ Os detalhes de cada parte estão em [docs/TINYML.md](docs/TINYML.md), [docs/FIRM
 
 <p align="center"><img src="docs/imagens/projeto-editor.png" alt="Editor de projeto de firmware" width="900"></p>
 <p align="center"><em>Projeto PlatformIO: árvore de arquivos, editor, compilação com modelo TinyML embutido e gravação.</em></p>
+
+### Modelos
+
+<p align="center"><img src="docs/imagens/modelos-lista.png" alt="Lista de modelos" width="900"></p>
+<p align="center"><em>Área Modelos: TinyML, clássicos (scikit-learn) e ajuste fino de LLM, cada um com seus treinos e a versão publicada.</em></p>
+
+<p align="center"><img src="docs/imagens/modelos-novo.png" alt="Assistente de novo modelo" width="900"></p>
+<p align="center"><em>Assistente de criação em 3 passos: tipo, tarefa e dados, configuração.</em></p>
+
+<p align="center"><img src="docs/imagens/modelo-treino.png" alt="Treino de modelo de imagens" width="900"></p>
+<p align="center"><em>Treino de um classificador de imagens: curva de perda, matriz de confusão e log por época.</em></p>
+
+<p align="center"><img src="docs/imagens/modelo-comparar.png" alt="Comparação de treinos" width="900"></p>
+<p align="center"><em>Comparação lado a lado: parâmetros que mudaram e a melhor métrica em destaque.</em></p>
+
+<p align="center"><img src="docs/imagens/modelo-usar.png" alt="Como usar o modelo" width="900"></p>
+<p align="center"><em>Aba "Usar": código C pronto para o header gerado (aqui, uma árvore de decisão exportada para C).</em></p>
+
+<p align="center"><img src="docs/imagens/dataset-imagens.png" alt="Dataset de imagens" width="900"></p>
+<p align="center"><em>Dataset de imagens enviado como .zip, com miniaturas por classe.</em></p>
+
+### Firmware e dados
 
 <p align="center"><img src="docs/imagens/compilacoes.png" alt="Lista de compilações" width="900"></p>
 <p align="center"><em>Histórico de compilações com status, placa e tamanho do firmware.</em></p>
@@ -133,8 +162,11 @@ flowchart LR
   server -->|"treinos"| trainer["trainer<br/>Python + TensorFlow"]
   server -->|"compilações"| builder["builder<br/>Python + PlatformIO"]
   server -.->|"LLM local"| ollama["ollama<br/>(perfil ollama)"]
+  server -.->|"ajuste fino local"| finetuner["finetuner<br/>Python + PyTorch<br/>(perfil gpu)"]
+  finetuner -.->|"registra o adaptador"| ollama
   trainer --- dados[("volume dados<br/>/data")]
   builder --- dados
+  finetuner --- dados
   server --- dados
 ```
 
@@ -142,7 +174,8 @@ flowchart LR
 |---|---|---|
 | `client` | React 18, Vite, nginx | Interface web, na porta `WEB_PORT` (padrão 8080) |
 | `server` | Node 20, Express, Prisma | API HTTP, autenticação, agentes, projetos e filas |
-| `trainer` | Python 3.11, FastAPI, TensorFlow | Treina os agentes TinyML e gera o TFLite |
+| `trainer` | Python 3.11, FastAPI, TensorFlow, scikit-learn | Treina os agentes e modelos TinyML e tabulares, e gera o TFLite, o `model_data.h` e o `modelo_tabular.h` |
+| `finetuner` | Python 3.11, FastAPI, PyTorch, PEFT | Ajuste fino local de LLM com LoRA (só com o perfil `gpu`, exige GPU NVIDIA) |
 | `builder` | Python 3.11, FastAPI, PlatformIO | Compila os projetos e grava as placas |
 | `db` | PostgreSQL 16 | Dados da plataforma |
 | `ollama` | Ollama | Modelos locais (só com o perfil `ollama`) |
@@ -233,7 +266,8 @@ ai-creator/
   instalar.sh / instalar.ps1  instaladores (Linux/macOS e Windows)
   server/                     API (Node 20, TypeScript, Express, Prisma)
   client/                     interface web (React, TypeScript, Vite)
-  trainer/                    treino TinyML (Python, FastAPI, TensorFlow)
+  trainer/                    treino TinyML e tabular (Python, FastAPI, TensorFlow, scikit-learn)
+  finetuner/                  ajuste fino local de LLM (Python, FastAPI, PyTorch; perfil gpu)
   builder/                    compilação e gravação (Python, FastAPI, PlatformIO)
   extensions/vscode/          extensão do VS Code
   integrations/claude-code/   plugin e servidor MCP do Claude Code

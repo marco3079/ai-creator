@@ -10,6 +10,7 @@ export interface GrupoMenu {
 export const GRUPOS: GrupoMenu[] = [
   { titulo: '', icones: ['inicio'] },
   { titulo: 'Agentes', icones: ['robo', 'cerebro'] },
+  { titulo: 'Modelos', icones: ['laboratorio'] },
   { titulo: 'Firmware', icones: ['pasta', 'martelo', 'chip'] },
   { titulo: 'Dados', icones: ['dados'] },
   { titulo: 'Integrações', icones: ['plugin'] },

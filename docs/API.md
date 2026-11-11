@@ -29,7 +29,7 @@ Toda rota de escrita exige `ADMIN` ou `DEV`, salvo quando a tabela indicar outra
 
 - `id` pode ser o número ou o slug, nas rotas que indicam `(id ou slug)`.
 - Respostas de criação devolvem o objeto criado. Remoções devolvem `204` sem corpo.
-- Corpo de requisição: `application/json`, com limite de 25 MB.
+- Corpo de requisição: `application/json`, com limite de 25 MB. A exceção é o envio de arquivos de dataset (`POST /datasets/arquivo`), que aceita até 200 MB em corpo binário.
 
 ---
 
@@ -229,8 +229,13 @@ O CSV tem cabeçalho `rotulo,f0,f1,...,fN`. Cada linha seguinte tem o rótulo (t
 | GET | `/datasets` | logado | Lista `{ id, nome, descricao, tipo, classes, janela, amostras, colunas, criadoEm }[]` |
 | POST | `/datasets` | DEV, ADMIN | Corpo `{ nome, descricao?, tipo, janela?, csv }`. Valida o CSV, calcula classes, amostras e colunas, e grava em `/data/datasets/<id>.csv` |
 | DELETE | `/datasets/:id` | DEV, ADMIN | Remove o dataset. `204` |
-| GET | `/datasets/:id/amostra` | logado | Devolve as 20 primeiras linhas: `{ cabecalho: string[], linhas: string[][] }` |
-| GET | `/datasets/:id/csv` | logado | Baixa o CSV |
+| POST | `/datasets/arquivo?nome=&tipo=IMAGENS\|CONVERSAS&descricao=` | DEV, ADMIN | Envia um arquivo em corpo binário (`Content-Type` livre, até 200 MB). `IMAGENS` aceita `.zip` com uma pasta por classe; `CONVERSAS` aceita `.jsonl`. Valida tudo antes de gravar e responde 400 com a linha ou o arquivo com erro. Devolve o dataset |
+| GET | `/datasets/:id/amostra` | logado | Devolve `AmostraDataset` com o campo `formato`. `TABELA`: as 20 primeiras linhas (`{ cabecalho, linhas }`). `IMAGENS`: a quantidade por classe e até 4 `exemplos` por classe. `CONVERSAS`: as 5 primeiras conversas |
+| GET | `/datasets/:id/imagem?caminho=classe/arquivo.jpg` | logado | Devolve a imagem de um dataset `IMAGENS`. O caminho precisa estar dentro da pasta do dataset |
+| GET | `/datasets/:id/csv` | logado | Baixa o CSV (datasets `TABELA`, `SERIE_TEMPORAL` e `AUDIO`) |
+| GET | `/datasets/:id/arquivo` | logado | Baixa o arquivo de um dataset `CONVERSAS` (`.jsonl`). Para `IMAGENS` responde 400: baixe as imagens pela pasta do volume |
+
+Formatos dos arquivos de dataset de modelos, com exemplos, estão em [MODELOS.md](MODELOS.md).
 
 ### Treinos (`/api/treinos`)
 
@@ -243,6 +248,38 @@ O CSV tem cabeçalho `rotulo,f0,f1,...,fN`. Cada linha seguinte tem o rótulo (t
 | GET | `/treinos/:id/model_data.h` | logado | Baixa o arquivo C `model_data.h` |
 
 Os downloads exigem o token no cabeçalho. Para baixar pelo navegador, use `fetch` com o token e `URL.createObjectURL`.
+
+### Modelos (`/api/modelos`)
+
+Um modelo tem tipo (`TINYML`, `TABULAR`, `LLM_NUVEM` ou `LLM_LOCAL`), tarefa (`CLASSIFICACAO`, `REGRESSAO`, `IMAGEM` ou `CHAT`) e um dataset padrão. Tipo e tarefa não mudam depois de criado. `ModeloResumo` traz `principal`, a métrica principal do treino publicado.
+
+| Método | Rota | Perfil | Descrição |
+|---|---|---|---|
+| GET | `/modelos?tipo=&busca=` | logado | Lista `ModeloResumo[]`, do mais recente para o mais antigo |
+| GET | `/modelos/opcoes` | logado | Opções da tela de criação: arquiteturas TinyML, algoritmos tabulares com hiperparâmetros, modelos base de LLM e se o `finetuner` está disponível |
+| GET | `/modelos/:id` | logado | Devolve o `Modelo` com `treinos` (id ou slug) |
+| POST | `/modelos` | DEV, ADMIN | Corpo `{ nome, descricao?, tipo, tarefa, datasetId?, config?, tags? }`. Valida a combinação tipo × tarefa e tipo do dataset. `config` é mesclado sobre o padrão do tipo. Devolve `Modelo` (201) |
+| PUT | `/modelos/:id` | DEV, ADMIN | Corpo parcial `{ nome?, descricao?, datasetId?, config?, tags? }` |
+| DELETE | `/modelos/:id` | DEV, ADMIN | Remove o modelo e a pasta de artefatos. `204` |
+| POST | `/modelos/:id/duplicar` | DEV, ADMIN | Cria `<nome> (cópia)` sem treinos |
+| POST | `/modelos/:id/treinar` | DEV, ADMIN | Corpo `{ datasetId?, parametros? }`. Cria um treino novo (numerado) e o envia ao serviço do tipo. Devolve o `TreinoModelo` (201) |
+| GET | `/modelos/:id/treinos` | logado | Lista `TreinoModeloResumo[]`, do mais recente para o mais antigo |
+
+### Treinos de modelo (`/api/treinos-modelo`)
+
+| Método | Rota | Perfil | Descrição |
+|---|---|---|---|
+| GET | `/treinos-modelo/:id` | logado | Devolve o `TreinoModelo` completo, com `log`, `metricas` e `artefatos` |
+| POST | `/treinos-modelo/:id/cancelar` | DEV, ADMIN | Cancela um treino em FILA ou EXECUTANDO. Treinos de LLM na nuvem são cancelados na OpenAI. Devolve o treino |
+| POST | `/treinos-modelo/:id/publicar` | DEV, ADMIN | Publica um treino em SUCESSO como versão em uso. Desmarca o publicado anterior do mesmo modelo |
+| GET | `/treinos-modelo/:id/artefatos/:nome` | logado | Baixa um artefato (`model.tflite`, `model_data.h`, `modelo.joblib`, `adapter_model.safetensors` etc.) |
+| POST | `/treinos-modelo/:id/criar-agente` | DEV, ADMIN | Só LLM com SUCESSO. Cria um agente LLM que usa o `modeloResultante` (OpenAI para `LLM_NUVEM`, Ollama para `LLM_LOCAL`) |
+
+Um treino passa por FILA, EXECUTANDO e depois SUCESSO, FALHA ou CANCELADO. Os treinos de LLM na nuvem são acompanhados em segundo plano, a cada 30 segundos, pelo servidor.
+
+### Projetos e modelos embutidos
+
+`POST /projetos/:id/build` aceita também `modeloTreinoId`. O treino precisa ser de tipo `TINYML` ou `TABULAR`, com status SUCESSO. Os arquivos `HEADER_C` do treino (`model_data.h` e `modelo_tabular.h`) são copiados para `include/` do projeto, e o build fica vinculado ao treino. `agenteId` continua funcionando.
 
 ---
 
@@ -274,7 +311,7 @@ Caminhos com `..`, barra invertida (`\`) ou caminho absoluto devolvem `400`.
 
 | Método | Rota | Perfil | Descrição |
 |---|---|---|---|
-| POST | `/projetos/:id/build` | DEV, ADMIN | Corpo `{ agenteId? }`. Grava os arquivos em `/data/projetos/<slug>/`, copia o `model_data.h` do agente (se houver treino) para `include/`, envia ao `builder` e muda para EXECUTANDO. Devolve `Build` |
+| POST | `/projetos/:id/build` | DEV, ADMIN | Corpo `{ agenteId?, modeloTreinoId? }`. Grava os arquivos em `/data/projetos/<slug>/`, copia o `model_data.h` do agente (se houver treino) para `include/`, envia ao `builder` e muda para EXECUTANDO. Devolve `Build` |
 | GET | `/builds?projetoId=` | logado | Lista `{ id, projetoId, placa, status, tamanhoBytes, offset, criadoEm, finalizadoEm }[]` |
 | GET | `/builds/:id` | logado | Devolve a compilação completa, com `log` |
 | GET | `/builds/:id/firmware` | logado | Baixa o firmware gerado |
@@ -299,6 +336,7 @@ Usadas só pelos serviços da plataforma. Exigem `X-Interno-Token`.
 |---|---|---|---|
 | POST | `/interno/treinos/:id` | `trainer` | Atualiza o treino: `{ status, log?, metricas?, modeloTflite?, modeloH?, tamanhoBytes? }`. Em SUCESSO grava `ultimoTreinoId` no agente. `204` |
 | POST | `/interno/builds/:id` | `builder` | Atualiza a compilação: `{ status, log?, artefato?, offset?, tamanhoBytes? }`. `204` |
+| POST | `/interno/treinos-modelo/:id` | `trainer` e `finetuner` | Atualiza o treino de modelo: `{ status?, log? (acrescenta), metricas?, artefatos?, modeloResultante?, externoId? }`. `204` |
 
 Status possíveis: `FILA`, `EXECUTANDO`, `SUCESSO`, `FALHA` e `CANCELADO`.
 

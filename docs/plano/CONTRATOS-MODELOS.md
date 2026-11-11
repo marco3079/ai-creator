@@ -19,7 +19,7 @@ Um **Modelo** é independente dos agentes: tem tipo, tarefa, dataset padrão e c
 
 ## 2. Configuração padrão (`server/src/modules/modelos/padroes.ts` exporta `configPadrao(tipo, tarefa)`)
 
-- TINYML: `{ entrada:{tipo:'SERIE_TEMPORAL',canais:3,janela:50,frequenciaHz:50,imagem:{largura:96,altura:96,cores:1}}, arquitetura:'DENSA', camadas:2, neuronios:32, epocas:30, taxaAprendizado:0.001, tamanhoLote:32, quantizacao:'INT8', aumentoDados:false, placaAlvo:'ESP32', limiteRamKb:64, limiteFlashKb:256 }`. Para tarefa `IMAGEM`: `entrada.tipo='IMAGENS'`, `arquitetura='CNN2D'`, `epocas=20`, `tamanhoLote=16`, `aumentoDados=true`, `placaAlvo='ESP32S3'`, `limiteRamKb=320`, `limiteFlashKb=1024`.
+- TINYML: `{ entrada:{tipo:'SERIE_TEMPORAL',canais:3,janela:50,frequenciaHz:50,imagem:{largura:96,altura:96,cores:1}}, arquitetura:'DENSA', camadas:2, neuronios:32, epocas:30, taxaAprendizado:0.001, tamanhoLote:32, quantizacao:'INT8', aumentoDados:false, placaAlvo:'ESP32', limiteRamKb:64, limiteFlashKb:256 }`. Para tarefa `IMAGEM`: `entrada.tipo='IMAGENS'`, `arquitetura='CNN2D'`, `epocas=40`, `taxaAprendizado=0.003`, `tamanhoLote=16`, `aumentoDados=true`, `placaAlvo='ESP32S3'`, `limiteRamKb=320`, `limiteFlashKb=1024`.
 - TABULAR: `{ algoritmo:'RANDOM_FOREST', hiperparametros:{n_estimators:50,max_depth:8}, testeFracao:0.2, validacaoCruzada:5, normalizar:true, exportarC:true }`. Para `REGRESSAO` o mesmo algoritmo (regressor).
 - LLM_NUVEM: `{ provedor:'OPENAI', modeloBase:'gpt-4.1-mini-2025-04-14', epocas:null, tamanhoLote:null, multiplicadorTaxa:null, sufixo:'', promptSistema:'' }`.
 - LLM_LOCAL: `{ modeloBase:'llama3.2:1b', loraRank:16, loraAlpha:32, epocas:3, taxaAprendizado:0.0002, tamanhoLote:2, comprimentoMax:1024, nomeOllama:'', promptSistema:'' }`.
@@ -31,7 +31,7 @@ Resposta `OpcoesModelos` (ver `tipos-modelos.ts`):
 - `tabular.algoritmos` (rótulo, tarefas, exportaC, hiperparâmetros com padrão/min/max):
   - ARVORE "Árvore de decisão" — ambas, exportaC ✔ — `max_depth` int 1..50 (8), `min_samples_leaf` int 1..50 (1)
   - RANDOM_FOREST "Random Forest" — ambas, ✔ — `n_estimators` int 5..500 (50), `max_depth` int 1..50 (8)
-  - GRADIENT_BOOSTING "Gradient Boosting" — ambas, ✔ — `n_estimators` 10..500 (100), `learning_rate` decimal 0.001..1 (0.1), `max_depth` 1..10 (3)
+  - GRADIENT_BOOSTING "Gradient Boosting" — ambas, ✘ (o m2cgen 0.10 não exporta) — `n_estimators` 10..500 (100), `learning_rate` decimal 0.001..1 (0.1), `max_depth` 1..10 (3)
   - LOGISTICA "Regressão logística" — CLASSIFICACAO, ✔ — `C` decimal 0.001..100 (1), `max_iter` int 100..5000 (1000)
   - LINEAR "Regressão linear (Ridge)" — REGRESSAO, ✔ — `alpha` decimal 0..100 (1)
   - KNN "k vizinhos (KNN)" — ambas, ✘ — `n_neighbors` int 1..50 (5)
@@ -88,7 +88,7 @@ Roda em **processo filho** (`spawn`, igual ao treino atual) e chama o callback (
 TINYML (m04, `trainer/app/modelos/tinyml.py`):
 - CLASSIFICACAO: igual ao treino atual (reaproveite `app/treino.py`/`exportar.py` importando funções; não quebre o endpoint antigo `/treinos`).
 - REGRESSAO: CSV com `rotulo` numérico; saída `Dense(1)` linear, perda MSE; métricas mae/rmse/r2 (no conjunto de validação). INT8 com saída float32 permitida (`inference_output_type` float32) — anote no log.
-- IMAGEM: `tf.keras.utils.image_dataset_from_directory(caminho, image_size=(altura,largura), color_mode='grayscale'|'rgb', batch_size, validation_split=0.2, subset=..., seed=42, class_names=classes)`; normaliza /255 dentro do modelo (`Rescaling`); `aumentoDados` → `RandomFlip('horizontal')` + `RandomRotation(0.05)` (só no treino); CNN2D: `camadas` × [Conv2D(neuronios·2^i limitado a 128, 3, relu, padding same) + MaxPool2D] → GlobalAveragePooling2D → Dropout 0.2 → Dense softmax. Representativo INT8 = 100 imagens do treino. Matriz de confusão no conjunto de validação.
+- IMAGEM: `tf.keras.utils.image_dataset_from_directory(caminho, image_size=(altura,largura), color_mode='grayscale'|'rgb', batch_size, validation_split=0.2, subset=..., seed=42, class_names=classes)`; normaliza /255 dentro do modelo (`Rescaling`); `aumentoDados` → `RandomFlip('horizontal')` + `RandomRotation(0.05)` (só no treino); CNN2D: `camadas` × [Conv2D(neuronios·2^i limitado a 128, 3, relu, padding same) + MaxPool2D] → GlobalMaxPooling2D → Dropout 0.2 → Dense softmax. Representativo INT8 = 100 imagens do treino. Matriz de confusão no conjunto de validação.
 - Sempre: `model.tflite`, `model_data.h` (`para_header_c`, nome `g_model`), `metricas.json`; alerta no log se o `.tflite` passar de `limiteFlashKb`.
 
 TABULAR (m05, `trainer/app/modelos/tabular.py`, função `executar_tabular(pedido, enviar)`):

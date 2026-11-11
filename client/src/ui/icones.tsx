@@ -11,7 +11,7 @@ export type NomeIcone =
   | 'anexo' | 'estrela' | 'enviar' | 'fixar' | 'cadeado' | 'sol' | 'lua' | 'monitor'
   | 'chat' | 'email' | 'paleta' | 'visto' | 'visto-duplo' | 'responder' | 'lixeira' | 'grupo'
   | 'mais-circulo' | 'seta-esquerda'
-  | 'robo' | 'cerebro' | 'chip' | 'pasta' | 'codigo' | 'martelo' | 'usb' | 'dados' | 'terminal' | 'chave' | 'plugin' | 'download' | 'upload' | 'copiar' | 'historicoVersoes' | 'play' | 'parar';
+  | 'robo' | 'cerebro' | 'chip' | 'pasta' | 'codigo' | 'martelo' | 'usb' | 'dados' | 'terminal' | 'chave' | 'plugin' | 'download' | 'upload' | 'copiar' | 'historicoVersoes' | 'play' | 'parar' | 'laboratorio';
 
 export const NOMES_ICONES: NomeIcone[] = [
   'inicio', 'alunos', 'professores', 'usuarios', 'cursos', 'periodos', 'turmas',
@@ -24,7 +24,7 @@ export const NOMES_ICONES: NomeIcone[] = [
   'anexo', 'estrela', 'enviar', 'fixar', 'cadeado', 'sol', 'lua', 'monitor',
   'chat', 'email', 'paleta', 'visto', 'visto-duplo', 'responder', 'lixeira', 'grupo',
   'mais-circulo', 'seta-esquerda',
-  'robo', 'cerebro', 'chip', 'pasta', 'codigo', 'martelo', 'usb', 'dados', 'terminal', 'chave', 'plugin', 'download', 'upload', 'copiar', 'historicoVersoes', 'play', 'parar',
+  'robo', 'cerebro', 'chip', 'pasta', 'codigo', 'martelo', 'usb', 'dados', 'terminal', 'chave', 'plugin', 'download', 'upload', 'copiar', 'historicoVersoes', 'play', 'parar', 'laboratorio',
 ];
 
 // Desenhos sólidos em grade 24 x 24 (área útil 2.5 a 21.5). Preenchidos com currentColor.
@@ -411,6 +411,14 @@ const DESENHOS: Record<NomeIcone, ReactNode> = {
   'historicoVersoes': (<><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth={2.2} /><path d="M12 7V12L15 14" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></>),
   'play': <path d="M8 5.5V18.5L19 12Z" />,
   'parar': <rect x="6" y="6" width="12" height="12" rx="2" />,
+
+  // Frasco de laboratório (Erlenmeyer) sólido com rolha no topo e duas bolhas recortadas no líquido.
+  laboratorio: (
+    <>
+      <path d="M8 2.5H16V4.8H8Z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M9 5.5H15V9.5L19.8 18.6Q21 21 18.5 21H5.5Q3 21 4.2 18.6L9 9.5ZM9.5 17.5A1 1 0 1 0 11.5 17.5A1 1 0 1 0 9.5 17.5ZM13 14.6A1.2 1.2 0 1 0 15.4 14.6A1.2 1.2 0 1 0 13 14.6Z" />
+    </>
+  ),
 };
 
 export function Icone({

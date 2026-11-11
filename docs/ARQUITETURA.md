@@ -17,22 +17,34 @@ flowchart TB
     server["server<br/>Express + Prisma (3333)"]
     trainer["trainer<br/>FastAPI + TensorFlow (8001)"]
     builder["builder<br/>FastAPI + PlatformIO (8002)"]
+    finetuner["finetuner<br/>FastAPI + PyTorch (8003, perfil gpu)"]
     db[("db<br/>PostgreSQL 16 (5432)")]
     ollama["ollama<br/>(perfil ollama, 11434)"]
     dados[("volume dados<br/>/data")]
+    hf[("volume hf<br/>cache do Hugging Face")]
+  end
+  subgraph Nuvem["API da OpenAI"]
+    openai["ajuste fino (jobs)"]
   end
   client -->|"/api"| server
   vscode -->|"/api, token aic_"| server
   mcp -->|"/api, token aic_"| server
   server --> db
-  server -->|"POST /treinos"| trainer
+  server -->|"POST /treinos e /modelos/treinos"| trainer
   server -->|"POST /builds, /gravar"| builder
+  server -->|"POST /treinos (LLM local)"| finetuner
+  server -->|"ajuste fino (LLM nuvem)"| openai
   server -->|"/api/tags"| ollama
-  trainer -->|"callback /api/interno/treinos"| server
+  trainer -->|"callback /api/interno/treinos e /treinos-modelo"| server
   builder -->|"callback /api/interno/builds"| server
+  finetuner -->|"callback /api/interno/treinos-modelo"| server
+  finetuner -->|"/api/create"| ollama
+  server -->|"GET jobs a cada 30 s"| openai
   server --- dados
   trainer --- dados
   builder --- dados
+  finetuner --- dados
+  finetuner --- hf
 ```
 
 | Serviço | Pasta | Tecnologia | Porta interna | Exposto no computador |
@@ -40,8 +52,9 @@ flowchart TB
 | `db` | (imagem) | PostgreSQL 16 | 5432 | não |
 | `server` | `server/` | Node 20, Express 4, Prisma 5, TypeScript, `tsx` | 3333 | não |
 | `client` | `client/` | React 18, Vite 5, TypeScript, nginx | 80 | sim, `WEB_PORT` (padrão 8080) |
-| `trainer` | `trainer/` | Python 3.11, FastAPI, TensorFlow CPU | 8001 | não |
+| `trainer` | `trainer/` | Python 3.11, FastAPI, TensorFlow CPU, scikit-learn | 8001 | não |
 | `builder` | `builder/` | Python 3.11, FastAPI, PlatformIO | 8002 | não |
+| `finetuner` | `finetuner/` | Python 3.11, FastAPI, PyTorch CUDA, Transformers, PEFT, TRL | 8003 | não (perfil `gpu`, exige GPU NVIDIA) |
 | `ollama` | (imagem `ollama/ollama`) | Ollama | 11434 | não (perfil `ollama`) |
 
 Só o `client` é publicado. O `server` conversa com a extensão, com o MCP e com o navegador pelo `client`, que encaminha `/api`. Os serviços internos não têm porta publicada.
@@ -54,15 +67,19 @@ Só o `client` é publicado. O `server` conversa com a extensão, com o MCP e co
 | `dados` | `/data` | server, trainer, builder | Arquivos da plataforma |
 | `platformio` | `/root/.platformio` | builder | Plataformas e bibliotecas do PlatformIO, para não baixar a cada compilação |
 | `ollama` | `/root/.ollama` | ollama | Modelos locais |
+| `hf` | `/root/.cache/huggingface` | finetuner | Modelos base baixados do Hugging Face, para não baixar a cada treino |
 
 Dentro do volume `dados` (`/data`):
 
 ```
 /data/
-  datasets/<id>.csv          CSV enviados
-  treinos/<id>/              modelo.tflite, model_data.h e log do treino
-  projetos/<slug>/           arquivos do projeto PlatformIO
-  builds/<id>/               firmware gerado (firmware-merged.bin, firmware.bin etc.)
+  datasets/<id>.csv                 CSV enviados
+  datasets/<id>.jsonl               conversas enviadas (modelos LLM)
+  datasets/<id>/                    imagens extraídas do .zip (datasets IMAGENS)
+  treinos/<id>/                     modelo.tflite, model_data.h e log do treino (agentes TinyML)
+  modelos/<modeloId>/treinos/<n>/   artefatos de cada treino de modelo (model.tflite, modelo.joblib, adapter_model.safetensors etc.)
+  projetos/<slug>/                  arquivos do projeto PlatformIO
+  builds/<id>/                      firmware gerado (firmware-merged.bin, firmware.bin etc.)
 ```
 
 Os caminhos do servidor são relativos a `DATA_DIR`, que vale `/data` no Compose. Trainer e builder recebem só `DATA_DIR=/data`.
@@ -121,6 +138,81 @@ sequenceDiagram
 ```
 
 A gravação pelo navegador (Web Serial) não passa pelo servidor. O detalhe está em [FIRMWARE.md](FIRMWARE.md).
+
+## Fluxos de treino de modelos
+
+A área **Modelos** tem três caminhos de treino, escolhidos pelo tipo do modelo. Em todos, o servidor cria um `TreinoModelo` (com um `numero` por modelo) e acompanha o resultado por callback.
+
+### Treino TinyML e tabular (trainer)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuário
+  participant C as client
+  participant S as server
+  participant T as trainer
+  U->>C: Treinar o modelo com um dataset
+  C->>S: POST /api/modelos/:id/treinar
+  S->>S: Cria o TreinoModelo (FILA)
+  S->>T: POST /modelos/treinos (tipo, tarefa, dataset, saidaDir, config, callback)
+  T-->>S: 202 Accepted
+  S->>S: Treino passa para EXECUTANDO
+  T->>S: POST /api/interno/treinos-modelo/:id (log em blocos, por época ou etapa)
+  Note over T: Roda em processo filho (sklearn ou Keras)
+  T->>S: POST /api/interno/treinos-modelo/:id (SUCESSO, metricas, artefatos)
+  C->>S: GET /api/treinos-modelo/:id (polling)
+  S-->>C: Status, métricas e log
+```
+
+Se o processo filho morrer sem enviar o callback final, o servidor grava FALHA com o motivo.
+
+### Ajuste fino na OpenAI (worker)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuário
+  participant C as client
+  participant S as server
+  participant O as OpenAI
+  U->>C: Treinar modelo LLM na nuvem
+  C->>S: POST /api/modelos/:id/treinar
+  S->>O: POST /v1/files (JSONL, purpose fine-tune)
+  S->>O: POST /v1/fine_tuning/jobs
+  S->>S: Treino passa para EXECUTANDO e grava externoId
+  loop a cada 30 segundos (worker)
+    S->>O: GET /v1/fine_tuning/jobs/:id e /events
+    O-->>S: Status, eventos novos e métricas
+    S->>S: Acrescenta eventos ao log e ao histórico
+  end
+  S->>S: succeeded vira SUCESSO com modeloResultante ft:...
+  Note over S: Cancelar chama POST /v1/fine_tuning/jobs/:id/cancel
+```
+
+O worker roda dentro do próprio servidor, com proteção contra execuções sobrepostas. Falhas de rede são registradas no log e não derrubam o servidor.
+
+### Ajuste fino local (finetuner e Ollama)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant S as server
+  participant F as finetuner
+  participant G as GPU
+  participant L as ollama
+  S->>F: POST /treinos (dataset JSONL, config, nomeOllama, callback)
+  F-->>S: 202 Accepted
+  F->>S: POST /api/interno/treinos-modelo/:id (EXECUTANDO)
+  F->>G: LoRA (PEFT) com SFTTrainer, log por passo
+  F->>S: POST /api/interno/treinos-modelo/:id (log e metricas)
+  F->>L: POST /api/pull (modelo base)
+  F->>L: POST /api/blobs/sha256:... (adaptador e configuração)
+  F->>L: POST /api/create (base + adaptadores, nomeOllama)
+  F->>S: POST /api/interno/treinos-modelo/:id (SUCESSO, modeloResultante)
+```
+
+Se o Ollama não responder, o treino termina em SUCESSO com um aviso no log e sem `modeloResultante`. Assim o adaptador continua disponível para baixar.
 
 ## Autenticação
 

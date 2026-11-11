@@ -11,4 +11,5 @@ export const config = {
   internoToken: process.env.INTERNO_TOKEN ?? 'troque-token-interno',
   openaiChave: process.env.OPENAI_API_KEY ?? '',
   ollamaUrl: process.env.OLLAMA_URL ?? 'http://ollama:11434',
+  finetunerUrl: process.env.FINETUNER_URL ?? 'http://finetuner:8003',
 };

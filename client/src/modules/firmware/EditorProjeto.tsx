@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { useDados } from '../../lib/useDados';
 import { PLACAS, rotuloStatus, corStatus } from '../../lib/tipos-api';
 import type { Agente, AgenteResumo, Build, BuildResumo, Placa, Projeto } from '../../lib/tipos-api';
+import type { ModeloResumo, TreinoModeloResumo } from '../../lib/tipos-modelos';
 import { ArvoreArquivos } from './ArvoreArquivos';
 import { EditorCodigo } from './EditorCodigo';
 import { Gravador } from './Gravador';
@@ -41,8 +42,9 @@ export function EditorProjeto() {
   const [salvandoModal, setSalvandoModal] = useState(false);
   const naoSalvo = ativo !== null && conteudo !== original;
 
-  // Compilação
-  const [agenteId, setAgenteId] = useState('');
+  // Compilação. "Embutir modelo" guarda o tipo no valor: 'a:<agenteId>' (agente TinyML) ou 't:<treinoId>' (modelo treinado).
+  const [embutido, setEmbutido] = useState('');
+  const agenteId = embutido.startsWith('a:') ? embutido.slice(2) : '';
   const [compilando, setCompilando] = useState(false);
   const [buildAtual, setBuildAtual] = useState<Build | null>(null);
   const [erroBuild, setErroBuild] = useState<string | null>(null);
@@ -52,6 +54,40 @@ export function EditorProjeto() {
   const { dados: builds, recarregar: recarregarBuilds } = useDados<BuildResumo[]>(
     pid !== undefined ? `/builds?projetoId=${pid}` : null,
   );
+
+  // Modelos treinados (TinyML e Clássico) e os treinos concluídos de cada um, para o seletor "Embutir modelo".
+  const { dados: modelosTinyml } = useDados<ModeloResumo[]>('/modelos?tipo=TINYML');
+  const { dados: modelosTabular } = useDados<ModeloResumo[]>('/modelos?tipo=TABULAR');
+  const [treinosPorModelo, setTreinosPorModelo] = useState<Record<number, TreinoModeloResumo[]>>({});
+
+  useEffect(() => {
+    const modelos = [...(modelosTinyml ?? []), ...(modelosTabular ?? [])];
+    if (modelos.length === 0) return;
+    let cancelado = false;
+    Promise.all(modelos.map(async (m) => [m.id, await api.get<TreinoModeloResumo[]>(`/modelos/${m.id}/treinos`)] as const))
+      .then((pares) => {
+        if (cancelado) return;
+        const mapa: Record<number, TreinoModeloResumo[]> = {};
+        for (const [id, treinos] of pares) mapa[id] = treinos;
+        setTreinosPorModelo(mapa);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelado = true;
+    };
+  }, [modelosTinyml, modelosTabular]);
+
+  const modelosTreinados = [...(modelosTinyml ?? []), ...(modelosTabular ?? [])]
+    .flatMap((m) =>
+      (treinosPorModelo[m.id] ?? [])
+        .filter((t) => t.status === 'SUCESSO')
+        .map((t) => ({
+          id: t.id,
+          publicado: t.publicado,
+          rotulo: `${m.nome} v${t.numero}${t.publicado ? ' (publicado)' : ''}`,
+        })),
+    )
+    .sort((a, b) => Number(b.publicado) - Number(a.publicado));
 
   // Ao abrir a tela, mostra o build mais recente deste projeto (para gravar sem recompilar).
   useEffect(() => {
@@ -220,10 +256,12 @@ export function EditorProjeto() {
       return;
     }
     try {
-      const b = await api.post<Build>(
-        `/projetos/${pid}/build`,
-        agenteId ? { agenteId: Number(agenteId) } : {},
-      );
+      const corpo = embutido.startsWith('t:')
+        ? { modeloTreinoId: Number(embutido.slice(2)) }
+        : agenteId
+          ? { agenteId: Number(agenteId) }
+          : {};
+      const b = await api.post<Build>(`/projetos/${pid}/build`, corpo);
       setBuildAtual(b);
       recarregarBuilds();
     } catch (e) {
@@ -297,13 +335,30 @@ export function EditorProjeto() {
 
         <aside className="firmware-coluna-painel">
           <Cartao titulo="Compilar">
-            <Selecao
-              rotulo="Embutir modelo TinyML"
-              valor={agenteId}
-              aoMudar={setAgenteId}
-              vazio="Nenhum (sem modelo)"
-              opcoes={(agentes ?? []).map((a) => ({ valor: String(a.id), rotulo: a.nome }))}
-            />
+            <label className="campo">
+              <span className="campo-rotulo">Embutir modelo</span>
+              <select className="campo-controle" value={embutido} onChange={(e) => setEmbutido(e.target.value)}>
+                <option value="">Nenhum (sem modelo)</option>
+                {(agentes ?? []).length > 0 && (
+                  <optgroup label="Agentes TinyML">
+                    {(agentes ?? []).map((a) => (
+                      <option key={a.id} value={'a:' + a.id}>
+                        {a.nome}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {modelosTreinados.length > 0 && (
+                  <optgroup label="Modelos treinados">
+                    {modelosTreinados.map((m) => (
+                      <option key={m.id} value={'t:' + m.id}>
+                        {m.rotulo}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </label>
             {agenteId && agenteEscolhido && !treinoPronto && (
               <Aviso tipo="info">
                 Este agente ainda não tem treino concluído. O modelo não será embutido.

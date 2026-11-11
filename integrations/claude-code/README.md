@@ -1,6 +1,6 @@
 # Plugin AI Creator para o Claude Code
 
-Plugin que conecta o Claude Code ao AI Creator. Ele traz um servidor MCP com ferramentas para agentes, projetos de firmware e treino TinyML, além de três comandos de barra.
+Plugin que conecta o Claude Code ao AI Creator. Ele traz um servidor MCP com ferramentas para agentes, projetos de firmware, treino de agentes TinyML e treino de modelos, além de quatro comandos de barra.
 
 ## Instalação
 
@@ -30,8 +30,12 @@ O servidor MCP roda direto de `mcp-server/dist/index.js`, já compilado e versio
 | `listar_datasets` | Lista os datasets de treino. |
 | `treinar_agente` | Inicia o treino de um agente TinyML com um dataset. |
 | `status_treino` | Status, métricas e últimas linhas do log de um treino. |
+| `listar_modelos` | Lista os modelos (filtros `tipo` e `busca`). |
+| `criar_modelo` | Cria um modelo (TinyML, tabular, LLM na nuvem ou LLM local) com tarefa e dataset padrão. |
+| `treinar_modelo` | Inicia um treino do modelo (id ou slug) e devolve o treino criado. |
+| `status_treino_modelo` | Status, métrica principal, modelo resultante (LLM) e últimas 60 linhas do log de um treino de modelo. |
 
-Ao todo são 14 ferramentas.
+Ao todo são 18 ferramentas.
 
 ## Comandos de barra
 
@@ -40,6 +44,7 @@ Ao todo são 14 ferramentas.
 | `/ai-compilar [pasta]` | Compila o projeto da pasta (lê `.aicreator.json`) e mostra o resultado. |
 | `/ai-sincronizar-agentes` | Baixa os agentes LLM para `.claude/agents/`. Arquivos locais diferentes do servidor são listados e só são enviados com confirmação. |
 | `/ai-treinar [agente] [dataset]` | Treina um agente TinyML e acompanha até o fim. |
+| `/ai-treinar-modelo [modelo] [dataset]` | Treina um modelo (TinyML, tabular ou LLM), acompanha até o fim e relata as métricas. |
 
 ## Segurança
 

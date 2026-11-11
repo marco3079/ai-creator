@@ -21,6 +21,10 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: pip
+    directory: /finetuner
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
     directory: /builder
     schedule:
       interval: weekly

@@ -44,7 +44,16 @@ const ArquivoEsquema = z.object({
 
 const BuildEsquema = z.object({
   agenteId: z.number().int().positive().optional(),
+  modeloTreinoId: z.number().int().positive().optional(),
 });
+
+// Artefato de um treino da área Modelos (CONTRATOS-MODELOS §1).
+interface ArtefatoTreino {
+  nome: string;
+  tipo: string;
+  caminho: string;
+  tamanhoBytes: number;
+}
 
 // Aceita id numérico ou slug na URL.
 function filtroProjeto(ref: string): Prisma.ProjetoWhereInput {
@@ -342,6 +351,27 @@ router.post(
       }
     }
 
+    // Treino da área Modelos: seus artefatos HEADER_C vão para include/. Valida antes de gravar nada.
+    const headersTreino: { origem: string; nome: string }[] = [];
+    if (corpo.modeloTreinoId) {
+      const treino = await prisma.treinoModelo.findUnique({
+        where: { id: corpo.modeloTreinoId },
+        include: { modelo: { select: { tipo: true } } },
+      });
+      const tipoOk = treino?.modelo.tipo === 'TINYML' || treino?.modelo.tipo === 'TABULAR';
+      if (!treino || treino.status !== 'SUCESSO' || !tipoOk) {
+        throw new ErroHttp(400, 'Escolha um treino concluído com sucesso de um modelo TinyML ou Tabular');
+      }
+      const artefatos = (treino.artefatos as unknown as ArtefatoTreino[] | null) ?? [];
+      for (const artefato of artefatos.filter((a) => a.tipo === 'HEADER_C')) {
+        const origem = path.join(config.dataDir, artefato.caminho);
+        if (!fs.existsSync(origem)) {
+          throw new ErroHttp(400, `O artefato ${artefato.nome} do treino não foi encontrado`);
+        }
+        headersTreino.push({ origem, nome: path.basename(artefato.nome) });
+      }
+    }
+
     // Grava os arquivos antes de criar o Build, para não deixar registro órfão se a gravação falhar.
     const pasta = escreverProjetoEmDisco(projeto);
     if (origemModelo) {
@@ -349,12 +379,18 @@ router.post(
       fs.mkdirSync(path.dirname(destinoModelo), { recursive: true });
       fs.copyFileSync(origemModelo, destinoModelo);
     }
+    for (const header of headersTreino) {
+      const destino = path.join(pasta, 'include', header.nome);
+      fs.mkdirSync(path.dirname(destino), { recursive: true });
+      fs.copyFileSync(header.origem, destino);
+    }
 
     const build = await prisma.build.create({
       data: {
         projetoId: projeto.id,
         placa: projeto.placa,
         agenteId: corpo.agenteId ?? null,
+        modeloTreinoId: corpo.modeloTreinoId ?? null,
         status: 'FILA',
       },
     });

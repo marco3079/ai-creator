@@ -1,0 +1,327 @@
+/* Estilos da tela de detalhe do modelo (abas, treinos, comparação, uso). Cores só por variáveis do tema. */
+
+.det-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.det-icone {
+  color: var(--cor-primaria);
+  margin-right: 4px;
+}
+
+.det-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.det-ajuda {
+  color: var(--cor-texto-suave);
+  font-size: 0.9rem;
+  margin: 6px 0;
+}
+
+.det-subtitulo {
+  font-size: 1rem;
+  margin: 16px 0 8px;
+}
+
+.det-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.det-acoes > * {
+  flex: 0 1 auto;
+}
+
+.det-treino,
+.det-comparar,
+.det-usar,
+.det-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.det-modal {
+  gap: 12px;
+}
+
+/* ---------- Modelo resultante (LLM) ---------- */
+
+.det-modelo-resultante {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--cor-superficie-2);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+}
+
+.det-modelo-resultante code {
+  word-break: break-all;
+}
+
+/* ---------- Métricas ---------- */
+
+.det-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.det-metrica {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--cor-superficie-2);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+}
+
+.det-metrica span {
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+}
+
+.det-metrica strong {
+  font-size: 1.25rem;
+}
+
+/* ---------- Gráfico de histórico ---------- */
+
+.det-grafico {
+  margin: 0;
+}
+
+.det-grafico-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.det-grade {
+  stroke: var(--cor-borda);
+  stroke-width: 1;
+}
+
+.det-eixo {
+  fill: var(--cor-texto-suave);
+  font-size: 12px;
+}
+
+.det-serie-perda {
+  color: var(--cor-primaria);
+}
+
+.det-serie-metrica {
+  color: var(--cor-verde);
+}
+
+.det-linha-serie {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.det-ponto {
+  fill: currentColor;
+}
+
+.det-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  color: var(--cor-texto);
+  font-size: 0.9rem;
+}
+
+.det-legenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.det-legenda-item i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: currentColor;
+}
+
+.det-legenda-item small {
+  color: var(--cor-texto-suave);
+}
+
+.det-legenda-nota {
+  color: var(--cor-texto-suave);
+}
+
+/* ---------- Log, artefatos e parâmetros ---------- */
+
+.det-log {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  background: var(--cor-superficie-2);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.det-artefatos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.det-artefatos li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.det-artefato-nome {
+  font-family: ui-monospace, Consolas, monospace;
+  word-break: break-all;
+}
+
+.det-detalhes summary {
+  cursor: pointer;
+  color: var(--cor-texto-suave);
+  min-height: var(--altura-toque);
+  display: flex;
+  align-items: center;
+}
+
+.det-json {
+  overflow: auto;
+  padding: 12px;
+  background: var(--cor-superficie-2);
+  border-radius: var(--raio-pequeno);
+  font-size: 0.85rem;
+}
+
+/* ---------- Comparação ---------- */
+
+.det-escolha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.det-opcao-bloqueada {
+  opacity: 0.5;
+}
+
+.det-tabela-rolagem {
+  overflow-x: auto;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie);
+}
+
+.det-comparar-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.det-comparar-tabela th,
+.det-comparar-tabela td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cor-borda);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.det-comparar-tabela tbody th[scope='row'] {
+  font-weight: 500;
+  color: var(--cor-texto-suave);
+}
+
+.det-comparar-tabela .det-grupo th {
+  background: var(--cor-superficie-2);
+  color: var(--cor-texto);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.det-mudou {
+  background: var(--cor-laranja-suave);
+}
+
+.det-melhor {
+  color: var(--cor-sucesso);
+}
+
+.det-cabe {
+  color: var(--cor-sucesso);
+}
+
+.det-nao-cabe {
+  color: var(--cor-perigo);
+}
+
+/* ---------- Uso ---------- */
+
+.det-bloco {
+  position: relative;
+}
+
+.det-bloco-barra {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.det-codigo {
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  background: var(--cor-superficie-2);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* ---------- Celular ---------- */
+
+@media (max-width: 640px) {
+  .det-metricas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .det-acoes > * {
+    flex: 1 1 100%;
+  }
+}

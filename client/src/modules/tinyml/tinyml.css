@@ -161,3 +161,120 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* Datasets: imagens (.zip), conversas (.jsonl) e envio de arquivo */
+
+.tinyml-envio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tinyml-barra {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--cor-borda);
+}
+
+.tinyml-barra span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 999px;
+  background: var(--cor-primaria, #2563eb);
+  animation: tinyml-barra-correr 1.1s ease-in-out infinite;
+}
+
+@keyframes tinyml-barra-correr {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+.tinyml-classes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tinyml-miniaturas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.tinyml-miniatura {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-fundo);
+  padding: 4px;
+  text-align: center;
+}
+
+.tinyml-miniatura img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.tinyml-conversas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.tinyml-conversa {
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tinyml-balao {
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--cor-fundo);
+  border: 1px solid var(--cor-borda);
+}
+
+.tinyml-balao p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tinyml-balao-user {
+  align-self: flex-end;
+}
+
+.tinyml-balao-assistant {
+  align-self: flex-start;
+}
+
+.tinyml-balao-system {
+  align-self: center;
+  max-width: 100%;
+  font-style: italic;
+}
+
+.tinyml-balao-papel {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--cor-texto-suave);
+}

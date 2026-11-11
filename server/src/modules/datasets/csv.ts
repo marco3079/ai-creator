@@ -109,9 +109,14 @@ export function analisarCsv(texto: string): ResumoCsv {
     }
   }
 
+  // Rótulo numérico com muitos valores distintos é alvo de regressão, não classe: não lista "classes".
+  const LIMITE_CLASSES = 50;
+  const todosNumericos = [...classes].every((c) => c.trim() !== '' && Number.isFinite(Number(c)));
+  const ehRegressao = todosNumericos && classes.size > LIMITE_CLASSES;
+
   return {
     cabecalho,
-    classes: [...classes].sort(),
+    classes: ehRegressao ? [] : [...classes].sort(),
     amostras: dados.length,
     colunas: cabecalho.length - 1,
   };

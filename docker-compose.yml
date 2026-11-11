@@ -36,6 +36,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OLLAMA_URL: http://ollama:11434
+      FINETUNER_URL: http://finetuner:8003
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@aicreator.local}
       ADMIN_SENHA: ${ADMIN_SENHA:-trocar123}
     volumes:
@@ -78,6 +79,25 @@ services:
     #   - "/dev/ttyUSB0:/dev/ttyUSB0"
     restart: unless-stopped
 
+  # Ajuste fino local de LLM (LoRA). Exige GPU NVIDIA e o NVIDIA Container Toolkit.
+  # Suba com: docker compose --profile gpu up -d finetuner
+  finetuner:
+    build: ./finetuner
+    profiles: ["gpu"]
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - dados:/data
+      - hf:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama:0.6.8
     profiles: ["ollama"]
@@ -90,3 +110,4 @@ volumes:
   dados:
   platformio:
   ollama:
+  hf:

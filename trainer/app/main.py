@@ -4,6 +4,7 @@ from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel, Field
 
 from app import treino
+from app.modelos import executar as executar_modelo
 
 app = FastAPI(title='AI Creator - Trainer')
 
@@ -43,6 +44,19 @@ class PedidoTreino(BaseModel):
     callbackToken: str
 
 
+class PedidoModelo(BaseModel):
+    """Contrato de POST /modelos/treinos (CONTRATOS-MODELOS.md §5)."""
+
+    treinoId: int
+    tipo: Literal['TINYML', 'TABULAR']
+    tarefa: Literal['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM']
+    dataset: dict
+    saidaDir: str
+    config: dict
+    callbackUrl: str
+    callbackToken: str
+
+
 @app.get('/saude')
 def saude() -> dict:
     return {'ok': True}
@@ -51,4 +65,10 @@ def saude() -> dict:
 @app.post('/treinos', status_code=202)
 def criar_treino(pedido: PedidoTreino, tarefas: BackgroundTasks) -> dict:
     tarefas.add_task(treino.executar, pedido)
+    return {'aceito': True}
+
+
+@app.post('/modelos/treinos', status_code=202)
+def criar_treino_modelo(pedido: PedidoModelo, tarefas: BackgroundTasks) -> dict:
+    tarefas.add_task(executar_modelo.executar, pedido.model_dump())
     return {'aceito': True}

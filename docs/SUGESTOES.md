@@ -2,6 +2,10 @@
 
 Ideias para as próximas versões, organizadas por prazo. Cada item traz o motivo e um escopo inicial. A prioridade pode mudar conforme o uso real.
 
+## Concluído
+
+- **Treino de modelos** (versão 0.2.0): modelos TinyML, tabular, LLM na nuvem (OpenAI) e LLM local (LoRA com GPU e Ollama), com datasets de imagens e conversas, treinos numerados, publicação, embutir no firmware e ferramentas MCP. Veja [MODELOS.md](MODELOS.md).
+
 ## Curto prazo
 
 - **OTA (gravação pela rede)**: atualizar o firmware de um ESP32 pelo Wi-Fi, sem cabo. Reduz a necessidade de ir até a placa a cada versão.
@@ -20,6 +24,10 @@ Ideias para as próximas versões, organizadas por prazo. Cada item traz o motiv
 - **Custos e uso de tokens por agente**: somar o consumo de cada agente e de cada provedor, com alerta de limite.
 - **Filas com Redis e BullMQ**: trocar a fila atual de treinos e compilações por uma fila dedicada, para suportar mais jobs em paralelo e reinício sem perda.
 - **Runners de build remotos ou self-hosted**: rodar as compilações em outras máquinas, para não depender de um único contêiner.
+- **KWS por áudio com MFCC**: classificar palavras-chave a partir de áudio gravado, com extração MFCC no `trainer`. Hoje o áudio entra só como série temporal em CSV.
+- **AutoML e busca de hiperparâmetros**: testar combinações automaticamente dentro de um limite de tempo e indicar a melhor configuração do treino.
+- **Rastreamento de experimentos (estilo MLflow)**: comparar treinos lado a lado, com parâmetros, métricas e gráficos guardados por modelo.
+- **Avaliação de LLM ajustado**: conjunto de teste separado e comparação das respostas do modelo ajustado com as do modelo base.
 
 ## Longo prazo
 

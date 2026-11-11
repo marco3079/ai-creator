@@ -18,6 +18,7 @@ if (!TOKEN) {
 
 const TERMINAIS = new Set(['SUCESSO', 'FALHA', 'CANCELADO']);
 const LINHAS_DE_LOG = 80;
+const LINHAS_DE_LOG_TREINO_MODELO = 60;
 const INTERVALO_POLLING_MS = 3_000;
 
 class ErroApi extends Error {}
@@ -89,11 +90,11 @@ async function ferramenta(operacao: () => Promise<unknown>): Promise<Resultado> 
   }
 }
 
-function ultimasLinhas(log: string | undefined): string | undefined {
+function ultimasLinhas(log: string | undefined, linhas = LINHAS_DE_LOG): string | undefined {
   if (log === undefined) {
     return undefined;
   }
-  return log.split('\n').slice(-LINHAS_DE_LOG).join('\n');
+  return log.split('\n').slice(-linhas).join('\n');
 }
 
 /** Troca o campo `log` (que pode ser grande) pelas últimas linhas. */
@@ -329,6 +330,97 @@ servidor.registerTool(
     inputSchema: { id: z.number().int().describe('id do treino') },
   },
   ({ id }) => ferramenta(async () => resumirLog(await api('GET', `/treinos/${id}`))),
+);
+
+// ---------------------------------------------------------------- modelos
+
+const TIPOS_MODELO = ['TINYML', 'TABULAR', 'LLM_NUVEM', 'LLM_LOCAL'] as const;
+const TAREFAS_MODELO = ['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM', 'CHAT'] as const;
+const referenciaModelo = z.union([z.number().int(), z.string()]).describe('id numérico ou slug do modelo');
+
+servidor.registerTool(
+  'listar_modelos',
+  {
+    description:
+      'Lista os modelos (TinyML, tabular, LLM na nuvem e LLM local) com o treino publicado. Aceita filtro por tipo e busca por texto.',
+    inputSchema: {
+      tipo: z.enum(TIPOS_MODELO).optional().describe('Tipo do modelo'),
+      busca: z.string().optional().describe('Texto para buscar no nome ou nas tags'),
+    },
+  },
+  ({ tipo, busca }) =>
+    ferramenta(() => {
+      const params = new URLSearchParams();
+      if (tipo) {
+        params.set('tipo', tipo);
+      }
+      if (busca) {
+        params.set('busca', busca);
+      }
+      const consulta = params.toString();
+      return api('GET', `/modelos${consulta ? `?${consulta}` : ''}`);
+    }),
+);
+
+servidor.registerTool(
+  'criar_modelo',
+  {
+    description:
+      'Cria um modelo. O tipo e a tarefa precisam ser compatíveis (ex.: TINYML com CLASSIFICACAO, IMAGEM; LLM_NUVEM com CHAT). "config" é mesclado sobre a configuração padrão do tipo.',
+    inputSchema: {
+      nome: z.string().describe('Nome do modelo'),
+      tipo: z.enum(TIPOS_MODELO).describe('Tipo do modelo'),
+      tarefa: z.enum(TAREFAS_MODELO).describe('Tarefa do modelo'),
+      datasetId: z.number().int().optional().describe('id do dataset padrão do modelo'),
+      config: z.record(z.string(), z.unknown()).optional().describe('Ajustes da configuração do modelo'),
+    },
+  },
+  ({ nome, tipo, tarefa, datasetId, config }) =>
+    ferramenta(() => api('POST', '/modelos', { corpo: { nome, tipo, tarefa, datasetId, config } })),
+);
+
+servidor.registerTool(
+  'treinar_modelo',
+  {
+    description:
+      'Inicia um treino do modelo (cria um novo experimento numerado). Devolve o treino em fila ou em execução, com o id usado em status_treino_modelo.',
+    inputSchema: {
+      modelo: referenciaModelo,
+      datasetId: z.number().int().optional().describe('id do dataset; se omitido, usa o dataset padrão do modelo'),
+      parametros: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('Ajustes da configuração só para este treino (ex.: epocas, neuronios, n_estimators)'),
+    },
+  },
+  ({ modelo, datasetId, parametros }) =>
+    ferramenta(() =>
+      api('POST', `/modelos/${encodeURIComponent(String(modelo))}/treinar`, {
+        corpo: { datasetId, parametros },
+      }),
+    ),
+);
+
+servidor.registerTool(
+  'status_treino_modelo',
+  {
+    description:
+      'Mostra o status de um treino de modelo, a métrica principal, o modelo resultante (LLM) e as últimas 60 linhas do log.',
+    inputSchema: { id: z.number().int().describe('id do treino de modelo') },
+  },
+  ({ id }) =>
+    ferramenta(async () => {
+      const treino = (await api('GET', `/treinos-modelo/${id}`)) as Record<string, unknown> & {
+        log?: string;
+        metricas?: { principal?: unknown } | null;
+      };
+      const { log, metricas, ...resto } = treino;
+      return {
+        ...resto,
+        metricaPrincipal: metricas?.principal ?? null,
+        logUltimasLinhas: ultimasLinhas(typeof log === 'string' ? log : undefined, LINHAS_DE_LOG_TREINO_MODELO),
+      };
+    }),
 );
 
 async function main(): Promise<void> {

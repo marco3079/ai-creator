@@ -32,6 +32,7 @@ interface Atalho {
 const ATALHOS: Atalho[] = [
   { rotulo: 'Novo agente LLM', icone: 'robo', caminho: '/app/agentes/novo?tipo=LLM' },
   { rotulo: 'Novo agente TinyML', icone: 'cerebro', caminho: '/app/agentes/novo?tipo=TINYML' },
+  { rotulo: 'Novo modelo', icone: 'laboratorio', caminho: '/app/modelos/novo' },
   { rotulo: 'Novo projeto', icone: 'pasta', caminho: '/app/projetos' },
   { rotulo: 'Datasets', icone: 'dados', caminho: '/app/datasets' },
   { rotulo: 'Compilações', icone: 'martelo', caminho: '/app/builds' },
