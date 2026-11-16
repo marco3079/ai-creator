@@ -14,7 +14,7 @@ jobs:
       run:
         working-directory: extensions/vscode
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -69,7 +69,7 @@ jobs:
             echo "VSCE_PAT não configurado; publicação no Marketplace pulada."
             echo "tem=nao" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.token.outputs.tem == 'sim'
       - uses: actions/setup-node@v4
         if: steps.token.outputs.tem == 'sim'
