@@ -13,7 +13,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -47,7 +47,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -66,7 +66,7 @@ jobs:
       JWT_SECRET: segredo-e2e-ci
       INTERNO_TOKEN: token-interno-e2e-ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Subir o stack
         run: docker compose up -d --build db server client
       - name: Esperar o servidor responder
@@ -108,7 +108,7 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -124,7 +124,7 @@ jobs:
       run:
         working-directory: trainer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -140,7 +140,7 @@ jobs:
       run:
         working-directory: finetuner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -156,7 +156,7 @@ jobs:
       run:
         working-directory: builder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -172,7 +172,7 @@ jobs:
       run:
         working-directory: extensions/vscode
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -186,7 +186,7 @@ jobs:
       run:
         working-directory: integrations/claude-code/mcp-server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -197,7 +197,7 @@ jobs:
     name: Docker Compose
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validar docker-compose.yml (sem perfis e com perfis)
         run: |
           docker compose config -q
