@@ -19,8 +19,8 @@ test('usuário criado com senha temporária entra e é levado a trocar a senha',
   expect(criado.status()).toBe(201);
 
   await page.goto('/login');
-  await page.getByLabel('E-mail', { exact: true }).fill(emailNovo);
-  await page.getByLabel('Senha', { exact: true }).fill(senhaTemporaria);
+  await page.getByLabel(/^E-mail/).fill(emailNovo);
+  await page.getByLabel(/^Senha/).fill(senhaTemporaria);
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
 
   await expect(page).toHaveURL(/\/trocar-senha/);
