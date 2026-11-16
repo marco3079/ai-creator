@@ -125,7 +125,7 @@ jobs:
         working-directory: trainer
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Instalar dependências de teste
@@ -141,7 +141,7 @@ jobs:
         working-directory: finetuner
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Instalar dependências de teste
@@ -157,7 +157,7 @@ jobs:
         working-directory: builder
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Instalar dependências de teste
