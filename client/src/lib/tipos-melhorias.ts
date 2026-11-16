@@ -3,7 +3,7 @@ import type { StatusJob } from './tipos-api';
 
 // ---------- Eventos ao vivo (GET /api/eventos, SSE) ----------
 
-export type TipoTrabalho = 'treino' | 'treinoModelo' | 'build';
+export type TipoTrabalho = 'treino' | 'treinoModelo' | 'build' | 'dispositivo';
 
 export interface EventoTrabalho {
   tipo: TipoTrabalho;
@@ -12,6 +12,8 @@ export interface EventoTrabalho {
   agenteId?: number | null; // treino (agente TinyML)
   modeloId?: number | null; // treinoModelo
   projetoId?: number | null; // build
+  online?: boolean; // dispositivo (status vem como 'SUCESSO' fixo; use online/statusOta)
+  statusOta?: string | null; // dispositivo
   em: string; // ISO
 }
 

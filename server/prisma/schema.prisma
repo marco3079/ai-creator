@@ -201,6 +201,7 @@ model Build {
   log          String    @default("") @db.Text
   artefato     String? // relativo a DATA_DIR (ex.: "builds/12/firmware.bin")
   offset       String? // endereço de gravação (ex.: "0x0" para ESP32 merged)
+  artefatoOta  String? // só ESP32/S3: firmware da aplicação (sem bootloader) para OTA, relativo a DATA_DIR
   tamanhoBytes Int?
   tentativas   Int       @default(0)
   criadoEm     DateTime  @default(now())
@@ -218,6 +219,30 @@ model Dispositivo {
   ultimoBuildId  Int?
   ultimaGravacao DateTime?
   criadoEm       DateTime  @default(now())
+  // --- Frota / OTA (leva B) ---
+  projetoId      Int? // projeto cujo firmware roda na placa
+  chaveHash      String?   @unique // sha256 da chave do dispositivo ("aicd_..."); a chave em claro só aparece ao gerar
+  chavePrefixo   String? // primeiros 10 caracteres, para mostrar
+  buildAtualId   Int? // build que a placa informou estar rodando
+  buildAlvoId    Int? // build que deve ser instalado via OTA (null = nada a fazer)
+  online         Boolean   @default(false)
+  ultimoContato  DateTime?
+  ip             String?
+  telemetria     Json? // última mensagem de telemetria recebida
+  ultimaOta      DateTime?
+  statusOta      String? // ex.: "baixando", "ok", "erro: ..."
+  amostras       TelemetriaDispositivo[]
+}
+
+// Série de telemetria (retenção: 7 dias, limpa pelo servidor).
+model TelemetriaDispositivo {
+  id            Int         @id @default(autoincrement())
+  dispositivoId Int
+  dispositivo   Dispositivo @relation(fields: [dispositivoId], references: [id], onDelete: Cascade)
+  dados         Json
+  criadoEm      DateTime    @default(now())
+
+  @@index([dispositivoId, criadoEm])
 }
 
 model Log {
