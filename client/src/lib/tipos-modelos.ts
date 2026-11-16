@@ -2,16 +2,17 @@
 import type { Placa, StatusJob } from './tipos-api';
 
 export type TipoModelo = 'TINYML' | 'TABULAR' | 'LLM_NUVEM' | 'LLM_LOCAL';
-export type TarefaModelo = 'CLASSIFICACAO' | 'REGRESSAO' | 'IMAGEM' | 'CHAT';
-export type TipoDataset = 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS' | 'CONVERSAS';
+export type TarefaModelo = 'CLASSIFICACAO' | 'REGRESSAO' | 'IMAGEM' | 'AUDIO' | 'CHAT';
+// SONS = .zip com uma pasta por classe e arquivos .wav (palavra-chave / KWS). AUDIO = CSV de atributos já extraídos.
+export type TipoDataset = 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS' | 'CONVERSAS' | 'SONS';
 
 export const TIPOS_MODELO: { valor: TipoModelo; rotulo: string; descricao: string; tarefas: TarefaModelo[]; datasets: TipoDataset[] }[] = [
   {
     valor: 'TINYML',
     rotulo: 'TinyML (placa)',
     descricao: 'Rede neural pequena para microcontrolador. Exporta TFLite INT8 e model_data.h.',
-    tarefas: ['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM'],
-    datasets: ['SERIE_TEMPORAL', 'TABELA', 'AUDIO', 'IMAGENS'],
+    tarefas: ['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM', 'AUDIO'],
+    datasets: ['SERIE_TEMPORAL', 'TABELA', 'AUDIO', 'IMAGENS', 'SONS'],
   },
   {
     valor: 'TABULAR',
@@ -40,6 +41,7 @@ export const ROTULO_TAREFA: Record<TarefaModelo, string> = {
   CLASSIFICACAO: 'Classificação',
   REGRESSAO: 'Regressão',
   IMAGEM: 'Classificação de imagens',
+  AUDIO: 'Palavra-chave (áudio)',
   CHAT: 'Conversa (chat)',
 };
 
@@ -47,11 +49,13 @@ export const ROTULO_TAREFA: Record<TarefaModelo, string> = {
 
 export interface ConfigModeloTinyml {
   entrada: {
-    tipo: 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS';
+    tipo: 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS' | 'SONS';
     canais: number;
     janela: number;
     frequenciaHz: number;
     imagem: { largura: number; altura: number; cores: 1 | 3 };
+    // Só tarefa AUDIO: parâmetros do front-end de áudio (iguais aos do micro_speech do TFLite Micro).
+    audio: { taxaHz: number; duracaoMs: number; janelaMs: number; passoMs: number; canaisMel: number };
   };
   arquitetura: 'DENSA' | 'CNN1D' | 'DS_CNN' | 'CNN2D';
   camadas: number; // 1..6
@@ -214,4 +218,5 @@ export interface OpcoesModelos {
 export type AmostraDataset =
   | { formato: 'TABELA'; cabecalho: string[]; linhas: string[][] }
   | { formato: 'IMAGENS'; classes: { nome: string; quantidade: number; exemplos: string[] }[] }
-  | { formato: 'CONVERSAS'; conversas: { messages: { role: string; content: string }[] }[] };
+  | { formato: 'CONVERSAS'; conversas: { messages: { role: string; content: string }[] }[] }
+  | { formato: 'SONS'; classes: { nome: string; quantidade: number; exemplos: string[] }[] };
