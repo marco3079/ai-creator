@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { NOME_PERFIL } from '../lib/tipos';
 import { useTema } from '../lib/tema';
@@ -11,6 +12,7 @@ export function MenuUsuario() {
   const [aberto, setAberto] = useState(false);
   const area = useRef<HTMLDivElement>(null);
   const { temaEfetivo, alternar } = useTema();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!aberto) return;
@@ -31,6 +33,11 @@ export function MenuUsuario() {
   if (!usuario) return null;
 
   const primeiroNome = usuario.nome.trim().split(/\s+/)[0] ?? usuario.nome;
+
+  function trocarSenhaDaConta() {
+    setAberto(false);
+    navigate('/trocar-senha');
+  }
 
   function sairDaConta() {
     setAberto(false);
@@ -61,6 +68,10 @@ export function MenuUsuario() {
           <button type="button" role="menuitem" className="casca-menu-usuario-item" onClick={() => alternar()}>
             <Icone nome={temaEfetivo === 'escuro' ? 'sol' : 'lua'} tamanho={18} />
             {temaEfetivo === 'escuro' ? 'Tema claro' : 'Tema escuro'}
+          </button>
+          <button type="button" role="menuitem" className="casca-menu-usuario-item" onClick={trocarSenhaDaConta}>
+            <Icone nome="cadeado" tamanho={18} />
+            Trocar senha
           </button>
           <button type="button" role="menuitem" className="casca-menu-usuario-item casca-menu-usuario-sair" onClick={sairDaConta}>
             <Icone nome="sair" tamanho={18} />

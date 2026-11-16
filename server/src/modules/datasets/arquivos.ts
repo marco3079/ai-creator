@@ -5,9 +5,11 @@ import AdmZip from 'adm-zip';
 import { ErroHttp } from '../../lib/erros';
 import { caminhoDados } from '../../lib/arquivos';
 
-// Datasets de imagens (zip) e de conversas (JSONL) — CONTRATOS-MODELOS §4 "datasets".
+// Datasets de imagens (zip), de sons (zip de .wav, tipo SONS) e de conversas (JSONL) — CONTRATOS-MODELOS §4 "datasets".
 
 export const EXTENSOES_IMAGEM = ['jpg', 'jpeg', 'png', 'bmp', 'gif'];
+// SONS (palavra-chave): .zip com uma pasta por classe e arquivos .wav (PCM 16 bits; o trainer reamostra).
+export const EXTENSOES_SOM = ['wav'];
 export const MINIMO_CLASSES = 2;
 export const MINIMO_IMAGENS_POR_CLASSE = 2;
 export const MINIMO_CONVERSAS = 10;
@@ -32,8 +34,16 @@ const LIMITES_PADRAO: LimitesZip = {
 const PAPEIS_VALIDOS = ['system', 'user', 'assistant'];
 
 export function ehImagem(nome: string): boolean {
+  return ehArquivoDe(nome, EXTENSOES_IMAGEM);
+}
+
+export function ehAudio(nome: string): boolean {
+  return ehArquivoDe(nome, EXTENSOES_SOM);
+}
+
+function ehArquivoDe(nome: string, extensoes: string[]): boolean {
   const extensao = path.extname(nome).slice(1).toLowerCase();
-  return EXTENSOES_IMAGEM.includes(extensao);
+  return extensoes.includes(extensao);
 }
 
 // Remove o prefixo "./" repetido do início do caminho.
@@ -58,12 +68,14 @@ const mb = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MB`;
 
 // Extrai o zip para /data/datasets/<id>/. Aceita "classe/arquivo.jpg" ou "raiz/classe/arquivo.jpg"
 // (uma pasta raiz única é desembrulhada). Ignora __MACOSX e arquivos ocultos.
+// `extensoes`: EXTENSOES_IMAGEM (IMAGENS, padrão) ou EXTENSOES_SOM (SONS).
 // Limites: tamanho descomprimido declarado (validado antes de extrair) e tamanho real (durante a
 // gravação). Ao estourar, a pasta do dataset é apagada e a resposta é 400.
 export async function salvarImagensZip(
   id: number,
   buffer: Buffer,
-  limites: Partial<LimitesZip> = {}
+  limites: Partial<LimitesZip> = {},
+  extensoes: string[] = EXTENSOES_IMAGEM
 ): Promise<ResumoImagens> {
   const lim: LimitesZip = { ...LIMITES_PADRAO, ...limites };
   let zip: AdmZip;
@@ -94,7 +106,7 @@ export async function salvarImagensZip(
 
     const partes = nome.split('/').filter((p) => p !== '');
     if (partes.includes('__MACOSX') || partes.some((p) => p.startsWith('.'))) continue;
-    if (!ehImagem(nome)) continue;
+    if (!ehArquivoDe(nome, extensoes)) continue;
     if (entrada.header.size > lim.imagemBytes) {
       throw new ErroHttp(400, `A imagem ${nome} passa de ${mb(lim.imagemBytes)}`);
     }
@@ -219,14 +231,18 @@ export async function salvarConversas(id: number, texto: string): Promise<string
   return caminhoArquivo;
 }
 
-// Lista as imagens de uma classe do dataset de imagens (nomes relativos à pasta do dataset).
-export async function listarImagens(pastaDataset: string): Promise<{ nome: string; quantidade: number; exemplos: string[] }[]> {
+// Lista as imagens (ou os .wav, com `extensoes = EXTENSOES_SOM`) de cada classe do dataset
+// (nomes relativos à pasta do dataset).
+export async function listarImagens(
+  pastaDataset: string,
+  extensoes: string[] = EXTENSOES_IMAGEM
+): Promise<{ nome: string; quantidade: number; exemplos: string[] }[]> {
   const entradas = await readdir(pastaDataset, { withFileTypes: true }).catch(() => []);
   const classes = entradas.filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '__MACOSX');
   const saida: { nome: string; quantidade: number; exemplos: string[] }[] = [];
   for (const classe of classes.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))) {
     const arquivos = (await readdir(path.join(pastaDataset, classe.name), { withFileTypes: true }).catch(() => []))
-      .filter((a) => a.isFile() && !a.name.startsWith('.') && ehImagem(a.name))
+      .filter((a) => a.isFile() && !a.name.startsWith('.') && ehArquivoDe(a.name, extensoes))
       .map((a) => a.name)
       .sort();
     saida.push({

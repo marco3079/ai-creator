@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel, Field
 
-from app import treino
+from app import ativos, treino
 
 app = FastAPI(title='AI Creator - Finetuner')
 
@@ -49,17 +49,26 @@ def saude() -> dict:
     return {'ok': True, 'gpu': gpu, 'dispositivo': dispositivo}
 
 
+@app.get('/trabalhos')
+def trabalhos() -> dict:
+    return ativos.listar()
+
+
 def _executar_na_fila(pedido: PedidoTreino) -> None:
-    if not GPU.acquire(blocking=False):
-        treino._callback(pedido, {'log': 'Aguardando a GPU ficar livre...\n'})
-        GPU.acquire()
     try:
-        treino.executar(pedido)
+        if not GPU.acquire(blocking=False):
+            treino._callback(pedido, {'log': 'Aguardando a GPU ficar livre...\n'})
+            GPU.acquire()
+        try:
+            treino.executar(pedido)
+        finally:
+            GPU.release()
     finally:
-        GPU.release()
+        ativos.desmarcar('treinos', pedido.treinoId)
 
 
 @app.post('/treinos', status_code=202)
 def criar_treino(pedido: PedidoTreino, tarefas: BackgroundTasks) -> dict:
+    ativos.marcar('treinos', pedido.treinoId)
     tarefas.add_task(_executar_na_fila, pedido)
     return {'aceito': True}

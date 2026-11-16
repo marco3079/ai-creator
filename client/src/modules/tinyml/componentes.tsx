@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useEventosTrabalho } from '../../lib/eventos';
 import { useDados } from '../../lib/useDados';
 import { PLACAS, rotuloStatus, corStatus } from '../../lib/tipos-api';
 import type { ConfigTinyml, Dataset, MetricasTreino, Treino, TreinoResumo, StatusJob } from '../../lib/tipos-api';
@@ -370,23 +371,40 @@ export function AbaTreino({ agenteId, config }: { agenteId: number; config: Conf
   const lista = useDados<TreinoResumo[]>(`/treinos?agenteId=${agenteId}`);
   const detalhe = useDados<Treino>(selecionadoId !== null ? `/treinos/${selecionadoId}` : null);
 
-  // Polling a cada 3 s enquanto houver treino na fila ou executando.
-  const listaEmAndamento = (lista.dados ?? []).some((t) => emAndamento(t.status));
-  useEffect(() => {
-    if (!listaEmAndamento) return;
-    const t = window.setTimeout(() => lista.recarregar(), 3000);
-    return () => window.clearTimeout(t);
-    // recarregar é estável; o efeito reage só à mudança de dados
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listaEmAndamento, lista.dados]);
+  // Recarrega quando o servidor avisa uma mudança nos treinos deste agente.
+  useEventosTrabalho(
+    (e) => e.tipo === 'treino' && e.agenteId === agenteId,
+    (e) => {
+      lista.recarregar();
+      if (e.id === selecionadoId) detalhe.recarregar();
+    },
+  );
 
+  const listaEmAndamento = (lista.dados ?? []).some((t) => emAndamento(t.status));
   const detalheEmAndamento = detalhe.dados !== null && emAndamento(detalhe.dados.status);
+  const algumEmAndamento = listaEmAndamento || detalheEmAndamento;
+
+  // Polling de segurança a cada 20 s, só enquanto houver treino na fila ou executando.
   useEffect(() => {
-    if (!detalheEmAndamento) return;
-    const t = window.setTimeout(() => detalhe.recarregar(), 3000);
-    return () => window.clearTimeout(t);
+    if (!algumEmAndamento) return;
+    const t = window.setInterval(() => {
+      lista.recarregar();
+      detalhe.recarregar();
+    }, 20000);
+    return () => window.clearInterval(t);
+    // recarregar é estável
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detalheEmAndamento, detalhe.dados]);
+  }, [algumEmAndamento]);
+
+  // Posição (1-based) do treino entre os da fila deste agente, pelo mais antigo.
+  function rotuloFila(id: number, status: StatusJob): string {
+    if (status !== 'FILA') return rotuloStatus(status);
+    const fila = (lista.dados ?? [])
+      .filter((t) => t.status === 'FILA')
+      .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+    const posicao = fila.findIndex((t) => t.id === id) + 1;
+    return posicao > 0 ? `na fila (${posicao})` : 'na fila';
+  }
 
   const datasetEscolhido = datasets.dados?.find((d) => String(d.id) === datasetId) ?? null;
 
@@ -486,7 +504,7 @@ export function AbaTreino({ agenteId, config }: { agenteId: number; config: Conf
                   onClick={() => setSelecionadoId(item.id)}
                 >
                   <span>Treino #{item.id}</span>
-                  <Selo cor={corStatus(item.status)}>{rotuloStatus(item.status)}</Selo>
+                  <Selo cor={corStatus(item.status)}>{rotuloFila(item.id, item.status)}</Selo>
                   <span className="tinyml-ajuda">
                     {new Date(item.criadoEm).toLocaleString('pt-BR')}
                   </span>
@@ -504,7 +522,7 @@ export function AbaTreino({ agenteId, config }: { agenteId: number; config: Conf
           {t && (
             <>
               <div className="tinyml-linha">
-                <Selo cor={corStatus(t.status)}>{rotuloStatus(t.status)}</Selo>
+                <Selo cor={corStatus(t.status)}>{rotuloFila(t.id, t.status)}</Selo>
                 <span className="tinyml-ajuda">Tamanho do modelo: {formatarBytes(t.tamanhoBytes)}</span>
               </div>
 

@@ -31,7 +31,7 @@ export interface OpcoesModelos {
 const ARQUITETURAS: OpcoesModelos['tinyml']['arquiteturas'] = [
   { valor: 'DENSA', rotulo: 'Densa (camadas totalmente conectadas)', tarefas: ['CLASSIFICACAO', 'REGRESSAO'] },
   { valor: 'CNN1D', rotulo: 'CNN 1D (sinais)', tarefas: ['CLASSIFICACAO', 'REGRESSAO'] },
-  { valor: 'DS_CNN', rotulo: 'DS-CNN (leve, para microcontroladores)', tarefas: ['CLASSIFICACAO'] },
+  { valor: 'DS_CNN', rotulo: 'DS-CNN (leve, para microcontroladores)', tarefas: ['CLASSIFICACAO', 'AUDIO'] },
   { valor: 'CNN2D', rotulo: 'CNN 2D (imagens)', tarefas: ['IMAGEM'] },
 ];
 

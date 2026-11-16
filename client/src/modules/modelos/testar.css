@@ -1,0 +1,126 @@
+/* Aba "Testar" do modelo. Cores só por variáveis do tema. */
+
+.testar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.testar-campos {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+
+.testar-ajuda {
+  color: var(--cor-texto-suave);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.testar-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.testar-previa {
+  max-width: 320px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  overflow: hidden;
+  background: var(--cor-superficie-2);
+}
+
+.testar-previa img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.testar-audio {
+  width: 100%;
+  max-width: 420px;
+}
+
+.testar-resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 16px;
+  background: var(--cor-superficie-2);
+}
+
+.testar-classe {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--cor-primaria);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.testar-valor {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.testar-barras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.testar-barra {
+  display: grid;
+  grid-template-columns: minmax(80px, 160px) 1fr 56px;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.testar-barra-rotulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.testar-barra-trilho {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--cor-borda);
+  overflow: hidden;
+}
+
+.testar-barra-preench {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gradiente-primario, var(--cor-primaria));
+}
+
+.testar-barra-valor {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.testar-meta {
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.testar-saida-bruta {
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+}
+
+.testar-saida-bruta code {
+  overflow-wrap: anywhere;
+}

@@ -1,10 +1,13 @@
+import { lazy } from 'react';
 import type { RotaModulo } from '../../lib/rotas';
-import { Configuracoes } from './Configuracoes';
-import { Integracoes } from './Integracoes';
-import { Logs } from './Logs';
-import { Tokens } from './Tokens';
-import { Usuarios } from './Usuarios';
 import './sistema.css';
+
+const Configuracoes = lazy(() => import('./Configuracoes').then((m) => ({ default: m.Configuracoes })));
+const Integracoes = lazy(() => import('./Integracoes').then((m) => ({ default: m.Integracoes })));
+const Logs = lazy(() => import('./Logs').then((m) => ({ default: m.Logs })));
+const Tokens = lazy(() => import('./Tokens').then((m) => ({ default: m.Tokens })));
+const Usuarios = lazy(() => import('./Usuarios').then((m) => ({ default: m.Usuarios })));
+const Uso = lazy(() => import('./Uso').then((m) => ({ default: m.Uso })));
 
 export const rotas: RotaModulo[] = [
   {
@@ -38,6 +41,14 @@ export const rotas: RotaModulo[] = [
     perfis: ['ADMIN'],
     elemento: <Configuracoes />,
     ordem: 52,
+  },
+  {
+    caminho: '/app/uso',
+    rotulo: 'Uso e custos',
+    icone: 'grafico',
+    perfis: ['ADMIN', 'DEV'],
+    elemento: <Uso />,
+    ordem: 53,
   },
   {
     caminho: '/app/tokens',

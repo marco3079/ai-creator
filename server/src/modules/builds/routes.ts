@@ -6,6 +6,7 @@ import { config } from '../../lib/config';
 import { ErroHttp, idParam, rota } from '../../lib/erros';
 import { autenticar, exigirInterno, exigirPerfil } from '../../lib/auth';
 import { caminhoDados } from '../../lib/arquivos';
+import { emitirEvento } from '../../lib/eventos';
 
 const router = Router();
 
@@ -15,7 +16,8 @@ const GravarEsquema = z.object({
   porta: z.string().trim().min(1, 'Informe a porta'),
 });
 
-const StatusEsquema = z.enum(['FILA', 'EXECUTANDO', 'SUCESSO', 'FALHA', 'CANCELADO']);
+// O callback do builder nunca devolve FILA: só EXECUTANDO e os finais.
+const StatusEsquema = z.enum(['EXECUTANDO', 'SUCESSO', 'FALHA', 'CANCELADO']);
 
 const CallbackBuildEsquema = z.object({
   status: StatusEsquema,
@@ -134,10 +136,18 @@ router.post(
     if (!atual) {
       throw new ErroHttp(404, 'Compilação não encontrada');
     }
+    if (atual.status === 'CANCELADO') {
+      res.status(204).end();
+      return;
+    }
     const corpo = CallbackBuildEsquema.parse(req.body);
     const finaliza = corpo.status === 'SUCESSO' || corpo.status === 'FALHA' || corpo.status === 'CANCELADO';
-    await prisma.build.update({
-      where: { id },
+    // updateMany com status != CANCELADO: um cancelamento que chegou no meio não é sobrescrito.
+    const gravados = await prisma.build.updateMany({
+      // EXECUTANDO só vale enquanto FILA/EXECUTANDO (não volta atrás de SUCESSO/FALHA); finais respeitam CANCELADO.
+      where: corpo.status === 'EXECUTANDO'
+        ? { id, status: { in: ['FILA', 'EXECUTANDO'] } }
+        : { id, status: { not: 'CANCELADO' } },
       data: {
         status: corpo.status,
         log: corpo.log !== undefined ? atual.log + corpo.log : undefined,
@@ -147,6 +157,9 @@ router.post(
         finalizadoEm: finaliza ? new Date() : undefined,
       },
     });
+    if (gravados.count > 0) {
+      emitirEvento({ tipo: 'build', id, status: corpo.status, projetoId: atual.projetoId });
+    }
     res.status(204).end();
   })
 );

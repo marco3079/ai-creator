@@ -9,7 +9,10 @@ import { caminhoDados } from '../../lib/arquivos';
 import { gerarSlug } from '../../lib/slug';
 import { analisarCsv, interpretarCsv } from './csv';
 import {
+  EXTENSOES_IMAGEM,
+  EXTENSOES_SOM,
   caminhoSeguro,
+  ehAudio,
   ehImagem,
   listarImagens,
   salvarConversas,
@@ -29,7 +32,7 @@ const novoDatasetSchema = z.object({
 
 const novoArquivoSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do dataset'),
-  tipo: z.enum(['IMAGENS', 'CONVERSAS'], { message: 'Tipo deve ser IMAGENS ou CONVERSAS' }),
+  tipo: z.enum(['IMAGENS', 'SONS', 'CONVERSAS'], { message: 'Tipo deve ser IMAGENS, SONS ou CONVERSAS' }),
   descricao: z.string().optional(),
 });
 
@@ -96,7 +99,7 @@ router.post('/datasets', autenticar, exigirPerfil('ADMIN', 'DEV'), rota(async (r
   }
 }));
 
-// POST /datasets/arquivo?nome=&tipo=IMAGENS|CONVERSAS&descricao= — corpo binário (zip ou jsonl).
+// POST /datasets/arquivo?nome=&tipo=IMAGENS|SONS|CONVERSAS&descricao= — corpo binário (zip ou jsonl).
 // express.raw só nesta rota; o corpo chega como Buffer.
 router.post(
   '/datasets/arquivo',
@@ -139,12 +142,13 @@ router.post(
       return;
     }
 
-    // IMAGENS: o zip é validado e extraído para /data/datasets/<id>/
+    // IMAGENS e SONS: o zip é validado e extraído para /data/datasets/<id>/ (SONS aceita só .wav)
+    const extensoes = dados.tipo === 'SONS' ? EXTENSOES_SOM : EXTENSOES_IMAGEM;
     const criado = await prisma.dataset.create({
       data: {
         nome: dados.nome,
         descricao: dados.descricao ?? '',
-        tipo: 'IMAGENS',
+        tipo: dados.tipo,
         classes: [],
         janela: 0,
         amostras: 0,
@@ -153,7 +157,7 @@ router.post(
       },
     });
     try {
-      const resumo = await salvarImagensZip(criado.id, corpo);
+      const resumo = await salvarImagensZip(criado.id, corpo, {}, extensoes);
       const dataset = await prisma.dataset.update({
         where: { id: criado.id },
         data: {
@@ -180,7 +184,7 @@ router.delete('/datasets/:id', autenticar, exigirPerfil('ADMIN', 'DEV'), rota(as
   res.status(204).end();
 }));
 
-// GET /datasets/:id/amostra — TABELA: cabeçalho e 20 linhas; IMAGENS: classes com exemplos;
+// GET /datasets/:id/amostra — TABELA: cabeçalho e 20 linhas; IMAGENS e SONS: classes com exemplos;
 // CONVERSAS: 5 primeiras conversas.
 router.get('/datasets/:id/amostra', autenticar, rota(async (req, res) => {
   const dataset = await buscarDataset(idParam(req));
@@ -188,6 +192,12 @@ router.get('/datasets/:id/amostra', autenticar, rota(async (req, res) => {
   if (dataset.tipo === 'IMAGENS') {
     const classes = await listarImagens(caminhoDados(dataset.caminhoArquivo));
     res.json({ formato: 'IMAGENS', classes });
+    return;
+  }
+
+  if (dataset.tipo === 'SONS') {
+    const classes = await listarImagens(caminhoDados(dataset.caminhoArquivo), EXTENSOES_SOM);
+    res.json({ formato: 'SONS', classes });
     return;
   }
 
@@ -232,6 +242,27 @@ router.get('/datasets/:id/imagem', autenticar, rota(async (req, res) => {
   res.sendFile(absoluto);
 }));
 
+// GET /datasets/:id/audio?caminho=classe/arquivo.wav — .wav de um dataset SONS
+router.get('/datasets/:id/audio', autenticar, rota(async (req, res) => {
+  const dataset = await buscarDataset(idParam(req));
+  if (dataset.tipo !== 'SONS') throw new ErroHttp(400, 'Este dataset não tem áudios');
+
+  const caminho = typeof req.query.caminho === 'string' ? req.query.caminho : '';
+  if (!caminhoSeguro(caminho) || !ehAudio(caminho)) {
+    throw new ErroHttp(400, 'Caminho de áudio inválido');
+  }
+  const pasta = path.resolve(caminhoDados(dataset.caminhoArquivo));
+  const absoluto = path.resolve(pasta, caminho);
+  if (!absoluto.startsWith(pasta + path.sep)) {
+    throw new ErroHttp(400, 'Caminho de áudio inválido');
+  }
+  await access(absoluto).catch(() => {
+    throw new ErroHttp(404, 'Áudio não encontrado');
+  });
+  res.type('audio/wav');
+  res.sendFile(absoluto);
+}));
+
 // GET /datasets/:id/csv — download do arquivo CSV (rota existente)
 router.get('/datasets/:id/csv', autenticar, rota(async (req, res, next) => {
   const dataset = await buscarDataset(idParam(req));
@@ -245,11 +276,11 @@ router.get('/datasets/:id/csv', autenticar, rota(async (req, res, next) => {
   });
 }));
 
-// GET /datasets/:id/arquivo — arquivo original (JSONL de conversas ou CSV). IMAGENS: 400.
+// GET /datasets/:id/arquivo — arquivo original (JSONL de conversas ou CSV). IMAGENS e SONS: 400.
 router.get('/datasets/:id/arquivo', autenticar, rota(async (req, res, next) => {
   const dataset = await buscarDataset(idParam(req));
-  if (dataset.tipo === 'IMAGENS') {
-    throw new ErroHttp(400, 'Baixe as imagens pela pasta do volume');
+  if (dataset.tipo === 'IMAGENS' || dataset.tipo === 'SONS') {
+    throw new ErroHttp(400, 'Baixe os arquivos pela pasta do volume');
   }
   const caminho = caminhoDados(dataset.caminhoArquivo);
   await access(caminho).catch(() => {

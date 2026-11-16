@@ -2,12 +2,12 @@
 // Espelham client/src/lib/tipos-modelos.ts.
 
 export type TipoModelo = 'TINYML' | 'TABULAR' | 'LLM_NUVEM' | 'LLM_LOCAL';
-export type TarefaModelo = 'CLASSIFICACAO' | 'REGRESSAO' | 'IMAGEM' | 'CHAT';
-export type TipoDataset = 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS' | 'CONVERSAS';
+export type TarefaModelo = 'CLASSIFICACAO' | 'REGRESSAO' | 'IMAGEM' | 'AUDIO' | 'CHAT';
+export type TipoDataset = 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS' | 'CONVERSAS' | 'SONS';
 
 // Tabela §1: tarefas aceitas por tipo de modelo.
 export const TAREFAS_POR_TIPO: Record<TipoModelo, TarefaModelo[]> = {
-  TINYML: ['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM'],
+  TINYML: ['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM', 'AUDIO'],
   TABULAR: ['CLASSIFICACAO', 'REGRESSAO'],
   LLM_NUVEM: ['CHAT'],
   LLM_LOCAL: ['CHAT'],
@@ -15,7 +15,7 @@ export const TAREFAS_POR_TIPO: Record<TipoModelo, TarefaModelo[]> = {
 
 // Tabela §1: datasets aceitos por tipo de modelo.
 export const DATASETS_POR_TIPO: Record<TipoModelo, TipoDataset[]> = {
-  TINYML: ['SERIE_TEMPORAL', 'TABELA', 'AUDIO', 'IMAGENS'],
+  TINYML: ['SERIE_TEMPORAL', 'TABELA', 'AUDIO', 'IMAGENS', 'SONS'],
   TABULAR: ['SERIE_TEMPORAL', 'TABELA', 'AUDIO'],
   LLM_NUVEM: ['CONVERSAS'],
   LLM_LOCAL: ['CONVERSAS'],
@@ -31,11 +31,13 @@ export type PlacaModelo =
 
 export interface ConfigModeloTinyml {
   entrada: {
-    tipo: 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS';
+    tipo: 'SERIE_TEMPORAL' | 'AUDIO' | 'TABELA' | 'IMAGENS' | 'SONS';
     canais: number;
     janela: number;
     frequenciaHz: number;
     imagem: { largura: number; altura: number; cores: 1 | 3 };
+    // Só tarefa AUDIO: parâmetros do front-end de áudio (iguais aos do micro_speech do TFLite Micro).
+    audio: { taxaHz: number; duracaoMs: number; janelaMs: number; passoMs: number; canaisMel: number };
   };
   arquitetura: 'DENSA' | 'CNN1D' | 'DS_CNN' | 'CNN2D';
   camadas: number; // 1..6
@@ -44,7 +46,7 @@ export interface ConfigModeloTinyml {
   taxaAprendizado: number;
   tamanhoLote: number; // 8..256
   quantizacao: 'INT8' | 'FLOAT32';
-  aumentoDados: boolean; // só IMAGEM: flip/rotação leve
+  aumentoDados: boolean; // IMAGEM: flip/rotação leve; AUDIO: deslocamento no tempo e ruído
   placaAlvo: PlacaModelo;
   limiteRamKb: number;
   limiteFlashKb: number;
@@ -89,23 +91,25 @@ export type ConfigModelo = ConfigModeloTinyml | ConfigModeloTabular | ConfigMode
 export function configPadrao(tipo: TipoModelo, tarefa: TarefaModelo): ConfigModelo {
   if (tipo === 'TINYML') {
     const imagens = tarefa === 'IMAGEM';
+    const audio = tarefa === 'AUDIO';
     const cfg: ConfigModeloTinyml = {
       entrada: {
-        tipo: imagens ? 'IMAGENS' : 'SERIE_TEMPORAL',
+        tipo: imagens ? 'IMAGENS' : audio ? 'SONS' : 'SERIE_TEMPORAL',
         canais: 3,
         janela: 50,
         frequenciaHz: 50,
         imagem: { largura: 96, altura: 96, cores: 1 },
+        audio: { taxaHz: 16000, duracaoMs: 1000, janelaMs: 30, passoMs: 20, canaisMel: 40 },
       },
-      arquitetura: imagens ? 'CNN2D' : 'DENSA',
+      arquitetura: imagens ? 'CNN2D' : audio ? 'DS_CNN' : 'DENSA',
       camadas: 2,
       neuronios: 32,
-      epocas: imagens ? 40 : 30,
-      taxaAprendizado: imagens ? 0.003 : 0.001,
-      tamanhoLote: imagens ? 16 : 32,
+      epocas: imagens || audio ? 40 : 30,
+      taxaAprendizado: imagens || audio ? 0.003 : 0.001,
+      tamanhoLote: imagens || audio ? 16 : 32,
       quantizacao: 'INT8',
-      aumentoDados: imagens,
-      placaAlvo: imagens ? 'ESP32S3' : 'ESP32',
+      aumentoDados: imagens || audio,
+      placaAlvo: imagens || audio ? 'ESP32S3' : 'ESP32',
       limiteRamKb: imagens ? 320 : 64,
       limiteFlashKb: imagens ? 1024 : 256,
     };

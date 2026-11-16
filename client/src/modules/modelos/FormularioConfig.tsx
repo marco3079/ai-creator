@@ -129,82 +129,134 @@ function SecaoTinyml({
   opcoes: OpcoesModelos;
 }) {
   const eImagem = tarefa === 'IMAGEM';
+  const eAudio = tarefa === 'AUDIO';
   const arquiteturas = opcoes.tinyml.arquiteturas.filter((a) => a.tarefas.includes(tarefa));
+  // Configs antigas podem não ter `audio`; o padrão do servidor é usado nesse caso.
+  const audio = valor.entrada.audio ?? { taxaHz: 16000, duracaoMs: 1000, janelaMs: 30, passoMs: 20, canaisMel: 40 };
 
   const atualizar = (parcial: Partial<ConfigModeloTinyml>) => aoMudar({ ...valor, ...parcial });
   const atualizarEntrada = (parcial: Partial<ConfigModeloTinyml['entrada']>) =>
     aoMudar({ ...valor, entrada: { ...valor.entrada, ...parcial } });
+  const atualizarAudio = (parcial: Partial<ConfigModeloTinyml['entrada']['audio']>) =>
+    atualizarEntrada({ audio: { ...audio, ...parcial } });
 
   return (
     <>
-      <Secao titulo="Entrada">
-        {eImagem ? (
-          <>
-            <CampoNumero
-              rotulo="Largura (px)"
-              valor={valor.entrada.imagem.largura}
-              min={16}
-              max={512}
-              aoMudar={(n) => atualizarEntrada({ imagem: { ...valor.entrada.imagem, largura: n } })}
-              ajuda="As imagens são redimensionadas para este tamanho."
-            />
-            <CampoNumero
-              rotulo="Altura (px)"
-              valor={valor.entrada.imagem.altura}
-              min={16}
-              max={512}
-              aoMudar={(n) => atualizarEntrada({ imagem: { ...valor.entrada.imagem, altura: n } })}
-            />
-            <Selecao
-              rotulo="Cores"
-              valor={String(valor.entrada.imagem.cores)}
-              opcoes={[
-                { valor: '1', rotulo: 'Escala de cinza (1 canal)' },
-                { valor: '3', rotulo: 'RGB (3 canais)' },
-              ]}
-              aoMudar={(v) =>
-                atualizarEntrada({ imagem: { ...valor.entrada.imagem, cores: Number(v) === 3 ? 3 : 1 } })
-              }
-            />
-          </>
-        ) : (
-          <>
-            <Selecao
-              rotulo="Tipo de dado"
-              valor={valor.entrada.tipo}
-              opcoes={[
-                { valor: 'SERIE_TEMPORAL', rotulo: 'Série temporal (sensores)' },
-                { valor: 'AUDIO', rotulo: 'Áudio' },
-                { valor: 'TABELA', rotulo: 'Tabela' },
-              ]}
-              aoMudar={(v) => atualizarEntrada({ tipo: v as ConfigModeloTinyml['entrada']['tipo'] })}
-            />
-            <CampoNumero
-              rotulo="Canais"
-              valor={valor.entrada.canais}
-              min={1}
-              max={16}
-              aoMudar={(n) => atualizarEntrada({ canais: n })}
-              ajuda="Quantidade de colunas de sinal por amostra."
-            />
-            <CampoNumero
-              rotulo="Janela (amostras)"
-              valor={valor.entrada.janela}
-              min={1}
-              max={1000}
-              aoMudar={(n) => atualizarEntrada({ janela: n })}
-              ajuda="Quantas amostras consecutivas formam uma entrada da rede."
-            />
-            <CampoNumero
-              rotulo="Frequência (Hz)"
-              valor={valor.entrada.frequenciaHz}
-              min={1}
-              max={10000}
-              aoMudar={(n) => atualizarEntrada({ frequenciaHz: n })}
-            />
-          </>
-        )}
-      </Secao>
+      {eAudio && (
+        <Secao titulo="Áudio">
+          <CampoNumero
+            rotulo="Taxa de amostragem (Hz)"
+            valor={audio.taxaHz}
+            min={8000}
+            max={48000}
+            aoMudar={(n) => atualizarAudio({ taxaHz: n })}
+            ajuda="Os .wav são reamostrados para esta taxa antes do treino."
+          />
+          <CampoNumero
+            rotulo="Duração (ms)"
+            valor={audio.duracaoMs}
+            min={250}
+            max={2000}
+            aoMudar={(n) => atualizarAudio({ duracaoMs: n })}
+            ajuda="Cada áudio é cortado ou completado com silêncio até esta duração."
+          />
+          <CampoNumero
+            rotulo="Janela (ms)"
+            valor={audio.janelaMs}
+            min={10}
+            max={64}
+            aoMudar={(n) => atualizarAudio({ janelaMs: n })}
+            ajuda="Tamanho de cada quadro da análise espectral."
+          />
+          <CampoNumero
+            rotulo="Passo (ms)"
+            valor={audio.passoMs}
+            min={10}
+            max={40}
+            aoMudar={(n) => atualizarAudio({ passoMs: n })}
+            ajuda="Deslocamento entre quadros consecutivos."
+          />
+          <CampoNumero
+            rotulo="Canais mel"
+            valor={audio.canaisMel}
+            min={10}
+            max={80}
+            aoMudar={(n) => atualizarAudio({ canaisMel: n })}
+            ajuda="Quantidade de bandas do espectrograma (padrão 40)."
+          />
+        </Secao>
+      )}
+
+      {!eAudio && (
+        <Secao titulo="Entrada">
+          {eImagem ? (
+            <>
+              <CampoNumero
+                rotulo="Largura (px)"
+                valor={valor.entrada.imagem.largura}
+                min={16}
+                max={512}
+                aoMudar={(n) => atualizarEntrada({ imagem: { ...valor.entrada.imagem, largura: n } })}
+                ajuda="As imagens são redimensionadas para este tamanho."
+              />
+              <CampoNumero
+                rotulo="Altura (px)"
+                valor={valor.entrada.imagem.altura}
+                min={16}
+                max={512}
+                aoMudar={(n) => atualizarEntrada({ imagem: { ...valor.entrada.imagem, altura: n } })}
+              />
+              <Selecao
+                rotulo="Cores"
+                valor={String(valor.entrada.imagem.cores)}
+                opcoes={[
+                  { valor: '1', rotulo: 'Escala de cinza (1 canal)' },
+                  { valor: '3', rotulo: 'RGB (3 canais)' },
+                ]}
+                aoMudar={(v) =>
+                  atualizarEntrada({ imagem: { ...valor.entrada.imagem, cores: Number(v) === 3 ? 3 : 1 } })
+                }
+              />
+            </>
+          ) : (
+            <>
+              <Selecao
+                rotulo="Tipo de dado"
+                valor={valor.entrada.tipo}
+                opcoes={[
+                  { valor: 'SERIE_TEMPORAL', rotulo: 'Série temporal (sensores)' },
+                  { valor: 'AUDIO', rotulo: 'Áudio' },
+                  { valor: 'TABELA', rotulo: 'Tabela' },
+                ]}
+                aoMudar={(v) => atualizarEntrada({ tipo: v as ConfigModeloTinyml['entrada']['tipo'] })}
+              />
+              <CampoNumero
+                rotulo="Canais"
+                valor={valor.entrada.canais}
+                min={1}
+                max={16}
+                aoMudar={(n) => atualizarEntrada({ canais: n })}
+                ajuda="Quantidade de colunas de sinal por amostra."
+              />
+              <CampoNumero
+                rotulo="Janela (amostras)"
+                valor={valor.entrada.janela}
+                min={1}
+                max={1000}
+                aoMudar={(n) => atualizarEntrada({ janela: n })}
+                ajuda="Quantas amostras consecutivas formam uma entrada da rede."
+              />
+              <CampoNumero
+                rotulo="Frequência (Hz)"
+                valor={valor.entrada.frequenciaHz}
+                min={1}
+                max={10000}
+                aoMudar={(n) => atualizarEntrada({ frequenciaHz: n })}
+              />
+            </>
+          )}
+        </Secao>
+      )}
 
       <Secao titulo="Arquitetura">
         <Selecao
@@ -253,8 +305,14 @@ function SecaoTinyml({
           max={256}
           aoMudar={(n) => atualizar({ tamanhoLote: n })}
         />
-        {eImagem && (
-          <Ajudado ajuda="Cria variações das imagens (espelho e leve rotação) só no treino.">
+        {(eImagem || eAudio) && (
+          <Ajudado
+            ajuda={
+              eAudio
+                ? 'Desloca o áudio no tempo (até 100 ms) e acrescenta ruído leve, só no treino.'
+                : 'Cria variações das imagens (espelho e leve rotação) só no treino.'
+            }
+          >
             <Caixa
               rotulo="Aumento de dados"
               marcado={valor.aumentoDados}

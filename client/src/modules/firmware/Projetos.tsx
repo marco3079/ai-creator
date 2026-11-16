@@ -8,6 +8,13 @@ import { PLACAS, rotuloStatus, corStatus } from '../../lib/tipos-api';
 import type { Placa, ProjetoResumo } from '../../lib/tipos-api';
 import './firmware.css';
 
+// Modelos que o usuário pode escolher ao criar um projeto (OTA entra na leva B).
+type ModeloNovo = 'BLINK' | 'COLETOR';
+const MODELOS_NOVOS: { valor: ModeloNovo; rotulo: string }[] = [
+  { valor: 'BLINK', rotulo: 'Pisca-LED' },
+  { valor: 'COLETOR', rotulo: 'Coletor de sensores' },
+];
+
 function rotuloPlaca(placa: string): string {
   return PLACAS.find((p) => p.valor === placa)?.rotulo ?? placa;
 }
@@ -18,6 +25,7 @@ export function Projetos() {
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [placa, setPlaca] = useState<Placa>('ESP32');
+  const [modelo, setModelo] = useState<ModeloNovo>('BLINK');
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState<string | null>(null);
   const navegar = useNavigate();
@@ -26,6 +34,7 @@ export function Projetos() {
     setNome('');
     setDescricao('');
     setPlaca('ESP32');
+    setModelo('BLINK');
     setErroForm(null);
     setNovo(true);
   }
@@ -39,6 +48,7 @@ export function Projetos() {
         nome: nome.trim(),
         descricao: descricao.trim() || undefined,
         placa,
+        modelo,
       });
       setNovo(false);
       navegar(`/app/projetos/${projeto.id}`);
@@ -99,6 +109,13 @@ export function Projetos() {
             valor={placa}
             aoMudar={(v) => setPlaca(v as Placa)}
             opcoes={PLACAS.map((p) => ({ valor: p.valor, rotulo: p.rotulo }))}
+            obrigatorio
+          />
+          <Selecao
+            rotulo="Modelo"
+            valor={modelo}
+            aoMudar={(v) => setModelo(v as ModeloNovo)}
+            opcoes={MODELOS_NOVOS}
             obrigatorio
           />
           {erroForm && <Aviso tipo="erro">{erroForm}</Aviso>}

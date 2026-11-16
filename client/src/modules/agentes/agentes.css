@@ -386,6 +386,68 @@
   border-bottom-left-radius: 4px;
 }
 
+/* Cartão recolhível de chamada de ferramenta, no meio da conversa. */
+.agente-ferramenta {
+  align-self: stretch;
+  border: 1px solid var(--cor-borda);
+  border-left: 3px solid var(--cor-primaria);
+  border-radius: 10px;
+  background: var(--cor-superficie);
+  font-size: 0.86rem;
+  min-width: 0;
+}
+
+.agente-ferramenta-erro {
+  border-left-color: var(--cor-perigo, #c0392b);
+}
+
+.agente-ferramenta > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  min-height: 36px;
+}
+
+.agente-ferramenta > summary::-webkit-details-marker {
+  display: none;
+}
+
+.agente-ferramenta-rotulo {
+  font-weight: 600;
+}
+
+.agente-ferramenta > summary small {
+  margin-left: auto;
+  color: var(--cor-texto-suave);
+}
+
+.agente-ferramenta-corpo {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agente-ferramenta-corpo pre {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--cor-fundo, rgba(0, 0, 0, 0.04));
+}
+
+.agentes-ferramentas-plataforma .agentes-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .agentes-entrada {
   display: flex;
   flex-direction: column;

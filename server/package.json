@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx prisma/seed.ts",
     "db:push": "prisma db push --skip-generate",
+    "test": "prisma db push --skip-generate --force-reset && vitest run",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -29,5 +30,10 @@
     "tsx": "4.23.15",
     "typescript": "5.6.3",
     "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/supertest": "6.0.2",
+    "supertest": "7.0.0",
+    "vitest": "2.1.8"
   }
 }

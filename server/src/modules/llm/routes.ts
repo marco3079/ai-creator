@@ -8,8 +8,13 @@ import { registrar } from '../../lib/log';
 import { MensagensEsquema } from '../agentes/esquemas';
 import { executorDe } from './executar';
 import { MODELOS_ANTHROPIC } from './provedores/anthropic';
+import { executarAnthropicComFerramentas } from './provedores/anthropic-ferramentas';
 import { MODELOS_OPENAI } from './provedores/openai';
+import { executarOpenaiComFerramentas } from './provedores/openai-ferramentas';
 import { listarModelosOllama, ollamaRespondeu } from './provedores/ollama';
+import type { UsoComFerramentas } from './provedores/ferramentas-tipos';
+import { criarExecutorFerramentas, ferramentasDoAgente } from './ferramentas';
+import { registrarUso } from '../uso/registrar';
 
 const router = express.Router();
 
@@ -63,6 +68,13 @@ router.post(
 
     const provedor = agente.provedor ?? 'ANTHROPIC';
     const executor = executorDe(provedor);
+    // Ferramentas da plataforma: só com projeto vinculado e "aic.*" marcados no agente.
+    const ferramentas = ferramentasDoAgente({
+      ferramentas: (agente.ferramentas as string[] | null) ?? [],
+      projetoId: agente.projetoId,
+    });
+    const comFerramentas = ferramentas.length > 0;
+    const ollamaSemFerramentas = comFerramentas && provedor === 'OLLAMA';
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -83,19 +95,50 @@ router.post(
     await registrar(req.usuario!.id, 'Executou agente', `${agente.slug} (${provedor})`);
 
     try {
-      const uso = await executor(
-        {
-          modelo: agente.modelo ?? '',
-          promptSistema: agente.promptSistema ?? '',
-          esforco: agente.esforco,
-          temperatura: agente.temperatura,
-          maxTokens: agente.maxTokens,
-        },
-        mensagens,
-        (texto) => enviar({ tipo: 'texto', texto }),
-        controle.signal,
-      );
-      enviar({ tipo: 'fim', uso });
+      if (ollamaSemFerramentas) {
+        enviar({
+          tipo: 'texto',
+          texto: 'Aviso: o Ollama não usa as ferramentas da plataforma; a resposta segue sem elas.\n\n',
+        });
+      }
+      const configuracao = {
+        modelo: agente.modelo ?? '',
+        promptSistema: agente.promptSistema ?? '',
+        esforco: agente.esforco,
+        temperatura: agente.temperatura,
+        maxTokens: agente.maxTokens,
+      };
+      const aoTexto = (texto: string) => enviar({ tipo: 'texto', texto });
+
+      let uso: { entrada: number; saida: number; ferramentas: number };
+      if (comFerramentas && provedor !== 'OLLAMA') {
+        const executorComFerramentas =
+          provedor === 'ANTHROPIC' ? executarAnthropicComFerramentas : executarOpenaiComFerramentas;
+        const comFerr: UsoComFerramentas = await executorComFerramentas(
+          configuracao,
+          mensagens,
+          ferramentas,
+          criarExecutorFerramentas(agente.projetoId!, req.usuario!.id),
+          aoTexto,
+          (evento) => enviar(evento),
+          controle.signal,
+        );
+        uso = comFerr;
+      } else {
+        const semFerr = await executor(configuracao, mensagens, aoTexto, controle.signal);
+        uso = { ...semFerr, ferramentas: 0 };
+      }
+
+      const { custoUsd } = await registrarUso({
+        agenteId: agente.id,
+        usuarioId: req.usuario!.id,
+        provedor,
+        modelo: agente.modelo ?? '',
+        entrada: uso.entrada,
+        saida: uso.saida,
+        ferramentas: uso.ferramentas,
+      });
+      enviar({ tipo: 'fim', uso: { entrada: uso.entrada, saida: uso.saida, custoUsd } });
     } catch (e) {
       if (!controle.signal.aborted) {
         enviar({ tipo: 'erro', erro: e instanceof Error ? e.message : 'Falha inesperada ao executar o agente' });

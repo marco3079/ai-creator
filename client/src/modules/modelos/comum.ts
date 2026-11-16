@@ -67,11 +67,13 @@ export function datasetsDoTipo(t: TipoModelo) {
 }
 
 // Datasets que o tipo/tarefa aceitam (CONTRATOS-MODELOS.md §1): TinyML de imagem usa IMAGENS;
-// TinyML de sinal usa CSV; LLM usa CONVERSAS.
+// TinyML de palavra-chave (AUDIO) usa SONS; TinyML de sinal usa CSV; LLM usa CONVERSAS.
 export function datasetsAceitos(tipo: TipoModelo, tarefa: TarefaModelo | null): TipoDataset[] {
   const base = datasetsDoTipo(tipo);
   if (tipo !== 'TINYML') return base;
-  return tarefa === 'IMAGEM' ? base.filter((d) => d === 'IMAGENS') : base.filter((d) => d !== 'IMAGENS');
+  if (tarefa === 'IMAGEM') return base.filter((d) => d === 'IMAGENS');
+  if (tarefa === 'AUDIO') return base.filter((d) => d === 'SONS');
+  return base.filter((d) => d !== 'IMAGENS' && d !== 'SONS');
 }
 
 // ---------- Configuração padrão no cliente ----------
@@ -81,6 +83,7 @@ export function datasetsAceitos(tipo: TipoModelo, tarefa: TarefaModelo | null): 
 export function configPadraoCliente(tipo: TipoModelo, tarefa: TarefaModelo): ConfigModelo {
   switch (tipo) {
     case 'TINYML': {
+      const audioPadrao = { taxaHz: 16000, duracaoMs: 1000, janelaMs: 30, passoMs: 20, canaisMel: 40 };
       if (tarefa === 'IMAGEM') {
         return {
           entrada: {
@@ -89,6 +92,7 @@ export function configPadraoCliente(tipo: TipoModelo, tarefa: TarefaModelo): Con
             janela: 50,
             frequenciaHz: 50,
             imagem: { largura: 96, altura: 96, cores: 1 },
+            audio: audioPadrao,
           },
           arquitetura: 'CNN2D',
           camadas: 2,
@@ -103,6 +107,29 @@ export function configPadraoCliente(tipo: TipoModelo, tarefa: TarefaModelo): Con
           limiteFlashKb: 1024,
         };
       }
+      if (tarefa === 'AUDIO') {
+        return {
+          entrada: {
+            tipo: 'SONS',
+            canais: 3,
+            janela: 50,
+            frequenciaHz: 50,
+            imagem: { largura: 96, altura: 96, cores: 1 },
+            audio: audioPadrao,
+          },
+          arquitetura: 'DS_CNN',
+          camadas: 2,
+          neuronios: 32,
+          epocas: 40,
+          taxaAprendizado: 0.003,
+          tamanhoLote: 16,
+          quantizacao: 'INT8',
+          aumentoDados: true,
+          placaAlvo: 'ESP32S3',
+          limiteRamKb: 64,
+          limiteFlashKb: 256,
+        };
+      }
       return {
         entrada: {
           tipo: 'SERIE_TEMPORAL',
@@ -110,6 +137,7 @@ export function configPadraoCliente(tipo: TipoModelo, tarefa: TarefaModelo): Con
           janela: 50,
           frequenciaHz: 50,
           imagem: { largura: 96, altura: 96, cores: 1 },
+          audio: audioPadrao,
         },
         arquitetura: 'DENSA',
         camadas: 2,

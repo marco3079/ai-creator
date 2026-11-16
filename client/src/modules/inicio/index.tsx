@@ -1,5 +1,7 @@
+import { lazy } from 'react';
 import type { RotaModulo } from '../../lib/rotas';
-import { Painel } from './Painel';
+
+const Painel = lazy(() => import('./Painel').then((m) => ({ default: m.Painel })));
 
 export const rotas: RotaModulo[] = [
   {

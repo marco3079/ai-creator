@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { api } from '../../lib/api';
 import { lerEventos } from '../../lib/sse';
 import { useDados } from '../../lib/useDados';
 import type { MensagemChat } from '../../lib/tipos-api';
-import { Aviso, Botao, Carregando, formatarDataHora } from '../../ui';
+import { FERRAMENTAS_PLATAFORMA } from '../../lib/tipos-melhorias';
+import type { EventoExecucao } from '../../lib/tipos-melhorias';
+import { Aviso, Botao, Carregando, Icone, formatarDataHora } from '../../ui';
+import { iconeDaPlataforma } from './FormularioLlm';
 
 interface ConversaResumo {
   id: number;
@@ -21,25 +24,96 @@ interface ConversaCompleta {
 interface Uso {
   entrada: number;
   saida: number;
+  custoUsd: number | null;
 }
 
-// Eventos do SSE de /agentes/:id/executar (CONTRATOS §3).
-type EventoExecucao =
-  | { tipo: 'texto'; texto: string }
-  | { tipo: 'fim'; uso: Uso }
-  | { tipo: 'erro'; erro: string };
+// Cartão de uma chamada de ferramenta (só na tela; não é salvo na conversa).
+interface CartaoFerramenta {
+  tipo: 'ferramenta';
+  id: string;
+  nome: string; // nome sem o prefixo "aic." (como o servidor envia)
+  entrada: string;
+  resultado: string;
+  erro: boolean;
+  concluida: boolean;
+}
+
+interface ItemMensagem {
+  tipo: 'mensagem';
+  msg: MensagemChat;
+}
+
+// A conversa mostrada: mensagens e cartões de ferramenta na ordem em que aconteceram.
+type Item = ItemMensagem | CartaoFerramenta;
 
 // Acrescenta trecho de texto à última mensagem (a resposta do assistente que está chegando).
-function acrescentar(lista: MensagemChat[], texto: string): MensagemChat[] {
-  if (lista.length === 0) return lista;
-  const copia = [...lista];
-  const ultima = copia[copia.length - 1];
-  copia[copia.length - 1] = { ...ultima, content: ultima.content + texto };
-  return copia;
+// Se a última coisa na tela é um cartão de ferramenta, abre um balão novo depois dele.
+function acrescentarTexto(itens: Item[], texto: string): Item[] {
+  const ultimo = itens[itens.length - 1];
+  if (ultimo && ultimo.tipo === 'mensagem' && ultimo.msg.role === 'assistant') {
+    const copia = [...itens];
+    copia[copia.length - 1] = { tipo: 'mensagem', msg: { ...ultimo.msg, content: ultimo.msg.content + texto } };
+    return copia;
+  }
+  return [...itens, { tipo: 'mensagem', msg: { role: 'assistant', content: texto } }];
+}
+
+// Histórico enviado ao servidor (e salvo): sem cartões, sem mensagens vazias e sem papéis repetidos
+// em sequência (textos seguidos do mesmo papel viram uma mensagem, separados por linha em branco).
+export function montarHistorico(itens: Item[]): MensagemChat[] {
+  const saida: MensagemChat[] = [];
+  for (const item of itens) {
+    if (item.tipo !== 'mensagem') continue;
+    const conteudo = item.msg.content.trim();
+    if (conteudo === '') continue;
+    const ultima = saida[saida.length - 1];
+    if (ultima && ultima.role === item.msg.role) {
+      saida[saida.length - 1] = { role: ultima.role, content: `${ultima.content}\n\n${conteudo}` };
+    } else {
+      saida.push({ role: item.msg.role, content: conteudo });
+    }
+  }
+  return saida;
+}
+
+function concluirFerramenta(itens: Item[], id: string, resultado: string, erro: boolean): Item[] {
+  return itens.map((item) =>
+    item.tipo === 'ferramenta' && item.id === id ? { ...item, resultado, erro, concluida: true } : item,
+  );
+}
+
+function formatarCusto(custo: number | null): string {
+  if (custo == null) return 'sem preço cadastrado';
+  return `US$ ${custo.toFixed(4).replace('.', ',')}`;
+}
+
+function CartaoFerramentaView({ c }: { c: CartaoFerramenta }) {
+  const nomeCompleto = `aic.${c.nome}`;
+  const rotulo = FERRAMENTAS_PLATAFORMA.find((f) => f.nome === nomeCompleto)?.rotulo ?? c.nome;
+  const situacao = !c.concluida ? 'executando…' : c.erro ? 'erro' : 'concluída';
+  return (
+    <details className={c.concluida && c.erro ? 'agente-ferramenta agente-ferramenta-erro' : 'agente-ferramenta'}>
+      <summary>
+        <Icone nome={iconeDaPlataforma(nomeCompleto)} tamanho={16} />
+        <span className="agente-ferramenta-rotulo">{rotulo}</span>
+        <small>{situacao}</small>
+      </summary>
+      <div className="agente-ferramenta-corpo">
+        <strong>Entrada</strong>
+        <pre>{c.entrada}</pre>
+        {c.concluida && (
+          <>
+            <strong>{c.erro ? 'Erro' : 'Resultado'}</strong>
+            <pre>{c.resultado}</pre>
+          </>
+        )}
+      </div>
+    </details>
+  );
 }
 
 export function Playground({ agenteId, pendente }: { agenteId: number; pendente: boolean }) {
-  const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
+  const [itens, setItens] = useState<Item[]>([]);
   const [entrada, setEntrada] = useState('');
   const [executando, setExecutando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -51,20 +125,27 @@ export function Playground({ agenteId, pendente }: { agenteId: number; pendente:
   const fimDasMensagens = useRef<HTMLDivElement>(null);
   const conversas = useDados<ConversaResumo[]>(`/agentes/${agenteId}/conversas`);
 
+  // Só as mensagens (sem os cartões) formam o histórico enviado e salvo.
+  const mensagens = useMemo(() => montarHistorico(itens), [itens]);
+
   // Cancela a execução se a tela sair.
   useEffect(() => () => controle.current?.abort(), []);
 
   // Mantém a última mensagem visível enquanto o texto chega.
   useEffect(() => {
     fimDasMensagens.current?.scrollIntoView({ block: 'end' });
-  }, [mensagens]);
+  }, [itens]);
 
   async function enviar() {
     const texto = entrada.trim();
     if (!texto || executando || pendente) return;
 
     const historico: MensagemChat[] = [...mensagens, { role: 'user', content: texto }];
-    setMensagens([...historico, { role: 'assistant', content: '' }]);
+    setItens((atuais) => [
+      ...atuais,
+      { tipo: 'mensagem', msg: { role: 'user', content: texto } },
+      { tipo: 'mensagem', msg: { role: 'assistant', content: '' } },
+    ]);
     setEntrada('');
     setErro(null);
     setAviso(null);
@@ -79,9 +160,30 @@ export function Playground({ agenteId, pendente }: { agenteId: number; pendente:
         { mensagens: historico },
         (ev) => {
           const e = ev as EventoExecucao;
-          if (e.tipo === 'texto') setMensagens((m) => acrescentar(m, e.texto));
-          else if (e.tipo === 'fim') setUso(e.uso);
-          else if (e.tipo === 'erro') setErro(e.erro);
+          if (e.tipo === 'texto') {
+            const trecho = e.texto;
+            setItens((atuais) => acrescentarTexto(atuais, trecho));
+          } else if (e.tipo === 'ferramenta') {
+            if (e.fase === 'inicio') {
+              const cartao: CartaoFerramenta = {
+                tipo: 'ferramenta',
+                id: e.id,
+                nome: e.nome,
+                entrada: e.entrada,
+                resultado: '',
+                erro: false,
+                concluida: false,
+              };
+              setItens((atuais) => [...atuais, cartao]);
+            } else {
+              const { id, resultado, erro: falhou } = e;
+              setItens((atuais) => concluirFerramenta(atuais, id, resultado, falhou));
+            }
+          } else if (e.tipo === 'fim') {
+            setUso(e.uso);
+          } else if (e.tipo === 'erro') {
+            setErro(e.erro);
+          }
         },
         ctrl.signal,
       );
@@ -106,7 +208,7 @@ export function Playground({ agenteId, pendente }: { agenteId: number; pendente:
   }
 
   function novaConversa() {
-    setMensagens([]);
+    setItens([]);
     setConversaId(null);
     setUso(null);
     setErro(null);
@@ -118,7 +220,7 @@ export function Playground({ agenteId, pendente }: { agenteId: number; pendente:
     setAviso(null);
     try {
       const c = await api.get<ConversaCompleta>(`/conversas/${id}`);
-      setMensagens(c.mensagens);
+      setItens(c.mensagens.map((msg) => ({ tipo: 'mensagem' as const, msg })));
       setConversaId(c.id);
       setUso(null);
     } catch (e) {
@@ -196,27 +298,34 @@ export function Playground({ agenteId, pendente }: { agenteId: number; pendente:
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
         <div className="agentes-mensagens" aria-live="polite">
-          {mensagens.length === 0 && (
+          {itens.length === 0 && (
             <p className="agentes-ajuda">Envie uma mensagem para testar o agente.</p>
           )}
-          {mensagens.map((m, i) => (
-            <div
-              key={i}
-              className={
-                m.role === 'user'
-                  ? 'agente-balao agente-balao-usuario'
-                  : 'agente-balao agente-balao-assistente'
-              }
-            >
-              {m.content}
-            </div>
-          ))}
+          {itens.map((item, i) => {
+            if (item.tipo === 'ferramenta') {
+              return <CartaoFerramentaView key={`f-${item.id}`} c={item} />;
+            }
+            // Balão vazio do assistente (ainda sem texto, ou só com ferramentas): não aparece.
+            if (item.msg.role === 'assistant' && item.msg.content === '') return null;
+            return (
+              <div
+                key={i}
+                className={
+                  item.msg.role === 'user'
+                    ? 'agente-balao agente-balao-usuario'
+                    : 'agente-balao agente-balao-assistente'
+                }
+              >
+                {item.msg.content}
+              </div>
+            );
+          })}
           <div ref={fimDasMensagens} />
         </div>
 
         {uso && (
           <p className="agentes-ajuda">
-            Tokens: entrada {uso.entrada} · saída {uso.saida}
+            Tokens: entrada {uso.entrada} · saída {uso.saida} · {formatarCusto(uso.custoUsd)}
           </p>
         )}
 

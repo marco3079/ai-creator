@@ -11,6 +11,7 @@ import {
   AgenteEntradaEsquema,
   ImportarEsquema,
   type AgenteAtualizacao,
+  type AgenteEntrada,
 } from './esquemas';
 import { deMarkdown, paraMarkdown } from './formatoMd';
 import {
@@ -282,7 +283,11 @@ router.post(
 
     const existente = await prisma.agente.findUnique({ where: { slug } });
     if (existente) {
-      const mesclado = preservarUltimoTreino(mesclar(doBanco(existente), entrada), existente);
+      // Reimportar um .md não apaga as ferramentas "aic.*" que o agente já tinha.
+      const aicExistentes = doBanco(existente).ferramentas.filter((f) => f.startsWith('aic.'));
+      const entradaComAic: AgenteEntrada =
+        formato === 'md' ? { ...entrada, ferramentas: [...(entrada.ferramentas ?? []), ...aicExistentes] } : entrada;
+      const mesclado = preservarUltimoTreino(mesclar(doBanco(existente), entradaComAic), existente);
       await atualizarAgente(existente, mesclado, 'Importado');
       await registrar(usuarioId, 'Importou agente', `${slug} (atualizado)`);
       res.json(paraAgente(await buscarAgente(String(existente.id))));

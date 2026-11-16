@@ -9,6 +9,8 @@ import { config } from '../../lib/config';
 import { ErroHttp, idParam, rota } from '../../lib/erros';
 import { autenticar, exigirInterno, exigirPerfil } from '../../lib/auth';
 import { registrar } from '../../lib/log';
+import { emitirEvento } from '../../lib/eventos';
+import { acordarFila } from '../fila/despachante';
 import { gerarSlug, slugUnico } from '../../lib/slug';
 import {
   buscarModelo,
@@ -20,7 +22,6 @@ import {
 } from '../modelos/comum';
 import type { ConfigModelo, TarefaModelo, TipoModelo, Artefato } from '../modelos/padroes';
 import { AGENTE_LLM_PADRAO } from '../agentes/padroes';
-import { despacharTreino } from './despachar';
 import { cancelarAjusteOpenai } from './openai';
 import { iniciarWorkerOpenai } from './worker';
 
@@ -87,7 +88,7 @@ async function enviarArtefato(res: Response, next: NextFunction, artefato: Artef
   });
 }
 
-// POST /modelos/:id/treinar — cria o TreinoModelo (FILA) e despacha ao serviço do tipo.
+// POST /modelos/:id/treinar — cria o TreinoModelo (FILA); o despachante envia ao serviço do tipo.
 router.post(
   '/modelos/:id/treinar',
   autenticar,
@@ -125,8 +126,8 @@ router.post(
       },
     });
     await registrar(req.usuario?.id ?? null, 'treino-modelo.criar', `${modelo.nome} (treino ${numero})`);
-
-    await despacharTreino(treino.id);
+    emitirEvento({ tipo: 'treinoModelo', id: treino.id, status: 'FILA', modeloId: modelo.id });
+    acordarFila();
 
     res.status(201).json(paraTreino(await buscarTreinoCompleto(treino.id)));
   }),
@@ -172,10 +173,13 @@ router.post(
       }
     }
     // Só grava se ainda estiver ativo: um callback que chegou antes já pode ter finalizado o treino.
-    await prisma.treinoModelo.updateMany({
+    const cancelados = await prisma.treinoModelo.updateMany({
       where: { id, status: { in: ['FILA', 'EXECUTANDO'] } },
       data: { status: 'CANCELADO', finalizadoEm: new Date() },
     });
+    if (cancelados.count > 0) {
+      emitirEvento({ tipo: 'treinoModelo', id, status: 'CANCELADO', modeloId: treino.modeloId });
+    }
     await registrar(req.usuario?.id ?? null, 'treino-modelo.cancelar', `treino #${id}`);
     res.json(paraTreino(await buscarTreinoCompleto(id)));
   }),
@@ -309,10 +313,20 @@ router.post(
     if (corpo.externoId !== undefined) dados.externoId = corpo.externoId;
 
     // updateMany com filtro: um cancelamento que chegou no meio da requisição não é sobrescrito.
-    await prisma.treinoModelo.updateMany({
-      where: { id, status: { not: 'CANCELADO' } },
+    const gravados = await prisma.treinoModelo.updateMany({
+      // EXECUTANDO só vale enquanto FILA/EXECUTANDO (não volta atrás de SUCESSO/FALHA); finais respeitam CANCELADO.
+      where: corpo.status === 'EXECUTANDO'
+        ? { id, status: { in: ['FILA', 'EXECUTANDO'] } }
+        : { id, status: { not: 'CANCELADO' } },
       data: dados,
     });
+    if (gravados.count > 0) {
+      const atual = await prisma.treinoModelo.findUnique({
+        where: { id },
+        select: { status: true, modeloId: true },
+      });
+      if (atual) emitirEvento({ tipo: 'treinoModelo', id, status: atual.status, modeloId: atual.modeloId });
+    }
     res.status(204).end();
   }),
 );

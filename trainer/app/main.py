@@ -1,10 +1,11 @@
 from typing import Literal
 
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app import treino
+from app import ativos, treino
 from app.modelos import executar as executar_modelo
+from app.modelos import prever as prever_modelo
 
 app = FastAPI(title='AI Creator - Trainer')
 
@@ -57,18 +58,71 @@ class PedidoModelo(BaseModel):
     callbackToken: str
 
 
+class ArtefatosPrever(BaseModel):
+    tflite: str | None = None
+    joblib: str | None = None
+    metricas: str
+
+
+class EntradaPrever(BaseModel):
+    valores: list[float] | None = None
+    imagemBase64: str | None = None
+    audioBase64: str | None = None
+
+
+class PedidoPrever(BaseModel):
+    """Contrato de POST /modelos/prever (CONTRATOS-MELHORIAS.md §3). Caminhos dos artefatos são absolutos."""
+
+    tipo: Literal['TINYML', 'TABULAR']
+    tarefa: Literal['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM', 'AUDIO']
+    artefatos: ArtefatosPrever
+    config: dict
+    entrada: EntradaPrever
+
+
 @app.get('/saude')
 def saude() -> dict:
     return {'ok': True}
 
 
+@app.get('/trabalhos')
+def trabalhos() -> dict:
+    return ativos.listar()
+
+
+def _treino_em_segundo_plano(pedido: PedidoTreino) -> None:
+    try:
+        treino.executar(pedido)
+    finally:
+        ativos.desmarcar('treinos', pedido.treinoId)
+
+
+def _treino_modelo_em_segundo_plano(pedido: dict) -> None:
+    try:
+        executar_modelo.executar(pedido)
+    finally:
+        ativos.desmarcar('treinosModelo', pedido['treinoId'])
+
+
 @app.post('/treinos', status_code=202)
 def criar_treino(pedido: PedidoTreino, tarefas: BackgroundTasks) -> dict:
-    tarefas.add_task(treino.executar, pedido)
+    ativos.marcar('treinos', pedido.treinoId)
+    tarefas.add_task(_treino_em_segundo_plano, pedido)
     return {'aceito': True}
 
 
 @app.post('/modelos/treinos', status_code=202)
 def criar_treino_modelo(pedido: PedidoModelo, tarefas: BackgroundTasks) -> dict:
-    tarefas.add_task(executar_modelo.executar, pedido.model_dump())
+    ativos.marcar('treinosModelo', pedido.treinoId)
+    tarefas.add_task(_treino_modelo_em_segundo_plano, pedido.model_dump())
     return {'aceito': True}
+
+
+@app.post('/modelos/prever')
+def prever(pedido: PedidoPrever) -> dict:
+    try:
+        return prever_modelo.prever(pedido.model_dump())
+    except prever_modelo.EntradaInvalida as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from erro
+    except prever_modelo.Indisponivel as erro:
+        raise HTTPException(status_code=501, detail=str(erro)) from erro

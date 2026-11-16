@@ -24,6 +24,83 @@ jobs:
       - name: Verificar tipos
         run: npx tsc --noEmit
 
+  server-testes:
+    name: Servidor (testes de API)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: teste
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:teste@localhost:5432/postgres
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Gerar cliente Prisma
+        run: npx prisma generate
+      - name: Rodar testes de API
+        run: npm test
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    env:
+      ADMIN_SENHA: senha-e2e-123
+      JWT_SECRET: segredo-e2e-ci
+      INTERNO_TOKEN: token-interno-e2e-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Subir o stack
+        run: docker compose up -d --build db server client
+      - name: Esperar o servidor responder
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8080/api/saude > /dev/null; then
+              echo "Servidor no ar"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Servidor não respondeu a tempo"
+          docker compose logs server | tail -100
+          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências do E2E
+        working-directory: e2e
+        run: npm install
+      - name: Instalar Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Rodar testes E2E
+        working-directory: e2e
+        run: npx playwright test
+      - name: Enviar relatório em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          if-no-files-found: ignore
+
   client:
     name: Cliente (React)
     runs-on: ubuntu-latest

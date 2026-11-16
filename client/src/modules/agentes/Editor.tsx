@@ -240,7 +240,7 @@ function EditorCarregado({
               />
 
               {ehLlm ? (
-                <FormularioLlm valor={llm} aoMudar={setLlm} />
+                <FormularioLlm valor={llm} aoMudar={setLlm} temProjeto={Boolean(projetoId)} />
               ) : (
                 <FormularioTinyml
                   valor={tinyml}

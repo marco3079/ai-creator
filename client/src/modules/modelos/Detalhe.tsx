@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useEventosTrabalho } from '../../lib/eventos';
 import { useDados } from '../../lib/useDados';
 import { ROTULO_TAREFA } from '../../lib/tipos-modelos';
 import type { ConfigModelo, Modelo, OpcoesModelos, TipoDataset } from '../../lib/tipos-modelos';
@@ -13,11 +14,13 @@ import { AbaTreinos } from './AbaTreinos';
 import { DetalheTreino } from './DetalheTreino';
 import { Comparar } from './Comparar';
 import { AbaUsar } from './AbaUsar';
+import { AbaTestar } from './AbaTestar';
 import './detalhe.css';
 
-// Tela de detalhe de um modelo (rota /app/modelos/:id). Abas: Treinos, Comparar, Configuração, Usar.
+// Tela de detalhe de um modelo (rota /app/modelos/:id). Abas: Treinos, Comparar, Testar (TINYML e TABULAR), Configuração, Usar.
 
-const INTERVALO_POLLING_MS = 3000;
+// Polling de segurança enquanto há treino em andamento (os eventos ao vivo fazem o resto).
+const INTERVALO_POLLING_MS = 20000;
 
 interface DatasetOpcao {
   id: number;
@@ -40,8 +43,6 @@ export function DetalheModelo() {
   const [modelo, setModelo] = useState<Modelo | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
-  // Muda a cada resposta (com sucesso ou erro). Mantém o polling vivo mesmo se uma leitura falhar.
-  const [ciclo, setCiclo] = useState(0);
   const [aba, setAba] = useState('treinos');
   const [treinoAbertoId, setTreinoAbertoId] = useState<number | null>(null);
   const [rascunho, setRascunho] = useState<ConfigModelo | null>(null);
@@ -78,7 +79,6 @@ export function DetalheModelo() {
     } finally {
       if (viva.current) {
         setCarregando(false);
-        setCiclo((c) => c + 1);
       }
     }
   }
@@ -93,14 +93,20 @@ export function DetalheModelo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Polling de 3 s enquanto algum treino estiver na fila ou executando.
+  // Recarrega quando o servidor avisa uma mudança nos treinos deste modelo.
+  useEventosTrabalho(
+    (e) => e.tipo === 'treinoModelo' && String(e.modeloId) === id,
+    () => void carregar(),
+  );
+
+  // Polling de segurança a cada 20 s enquanto algum treino estiver na fila ou executando.
   const algumEmAndamento = modelo?.treinos.some((t) => emAndamento(t.status)) ?? false;
   useEffect(() => {
     if (!algumEmAndamento) return;
-    const t = window.setTimeout(() => void carregar(), INTERVALO_POLLING_MS);
-    return () => window.clearTimeout(t);
+    const t = window.setInterval(() => void carregar(), INTERVALO_POLLING_MS);
+    return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [algumEmAndamento, ciclo]);
+  }, [algumEmAndamento]);
 
   function abrirTreinar() {
     if (!modelo) return;
@@ -186,6 +192,8 @@ export function DetalheModelo() {
   }
 
   const publicado = modelo.publicado;
+  // Testar só faz sentido para modelos de classificação e regressão em TinyML e Tabular (não para LLM).
+  const podeTestar = modelo.tipo === 'TINYML' || modelo.tipo === 'TABULAR';
   const aceitos = datasetsAceitos(modelo.tipo, modelo.tarefa);
   const datasetsCompativeis = (datasets.dados ?? []).filter((d) => aceitos.includes(d.tipo));
   const algoritmosDisponiveis = (opcoes.dados?.tabular.algoritmos ?? []).filter((a) =>
@@ -227,6 +235,7 @@ export function DetalheModelo() {
         abas={[
           { id: 'treinos', rotulo: 'Treinos' },
           { id: 'comparar', rotulo: 'Comparar' },
+          ...(podeTestar ? [{ id: 'testar', rotulo: 'Testar' }] : []),
           { id: 'configuracao', rotulo: 'Configuração' },
           { id: 'usar', rotulo: 'Usar' },
         ]}
@@ -249,6 +258,8 @@ export function DetalheModelo() {
         ))}
 
       {aba === 'comparar' && <Comparar modelo={modelo} treinos={modelo.treinos} />}
+
+      {aba === 'testar' && podeTestar && <AbaTestar modelo={modelo} treinos={modelo.treinos} />}
 
       {aba === 'configuracao' &&
         (opcoes.dados ? (

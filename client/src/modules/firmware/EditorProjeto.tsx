@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Aviso, Botao, Campo, Carregando, Cartao, Modal, Selecao, Selo } from '../../ui';
 import { api } from '../../lib/api';
+import { useEventosTrabalho } from '../../lib/eventos';
 import { useDados } from '../../lib/useDados';
 import { PLACAS, rotuloStatus, corStatus } from '../../lib/tipos-api';
 import type { Agente, AgenteResumo, Build, BuildResumo, Placa, Projeto } from '../../lib/tipos-api';
@@ -10,7 +11,11 @@ import type { ModeloResumo, TreinoModeloResumo } from '../../lib/tipos-modelos';
 import { ArvoreArquivos } from './ArvoreArquivos';
 import { EditorCodigo } from './EditorCodigo';
 import { Gravador } from './Gravador';
+import { MonitorSerial } from './MonitorSerial';
 import './firmware.css';
+
+// Polling de segurança enquanto a compilação está em andamento (os eventos ao vivo fazem o resto).
+const INTERVALO_POLLING_MS = 20000;
 
 const STATUS_FINAIS = ['SUCESSO', 'FALHA', 'CANCELADO'];
 
@@ -48,6 +53,8 @@ export function EditorProjeto() {
   const [compilando, setCompilando] = useState(false);
   const [buildAtual, setBuildAtual] = useState<Build | null>(null);
   const [erroBuild, setErroBuild] = useState<string | null>(null);
+  // Monitor serial: só monta (e abre a porta) quando a seção está aberta.
+  const [monitorAberto, setMonitorAberto] = useState(false);
 
   const { dados: agentes } = useDados<AgenteResumo[]>('/agentes?tipo=TINYML');
   const { dados: agenteEscolhido } = useDados<Agente>(agenteId ? `/agentes/${agenteId}` : null);
@@ -104,20 +111,38 @@ export function EditorProjeto() {
     };
   }, [builds, buildAtual]);
 
-  // Acompanha a compilação em andamento com polling de 2 s até terminar.
+  const buildId = buildAtual?.id;
+  const buildEmAndamento = buildAtual !== null && !STATUS_FINAIS.includes(buildAtual.status);
+
+  // Busca o build em acompanhamento e atualiza a lista quando termina.
+  async function atualizarBuildAtual() {
+    if (buildId === undefined) return;
+    try {
+      const atualizado = await api.get<Build>(`/builds/${buildId}`);
+      setBuildAtual(atualizado);
+      if (STATUS_FINAIS.includes(atualizado.status)) recarregarBuilds();
+    } catch (e) {
+      setErroBuild(e instanceof Error ? e.message : 'Erro ao acompanhar a compilação');
+    }
+  }
+
+  // Recarrega quando o servidor avisa uma mudança nos builds deste projeto.
+  useEventosTrabalho(
+    (e) => e.tipo === 'build' && e.projetoId === pid,
+    (e) => {
+      recarregarBuilds();
+      if (e.id === buildId) void atualizarBuildAtual();
+    },
+  );
+
+  // Polling de segurança a cada 20 s enquanto a compilação está em andamento.
   useEffect(() => {
-    if (!buildAtual || STATUS_FINAIS.includes(buildAtual.status)) return;
-    const timer = setTimeout(async () => {
-      try {
-        const atualizado = await api.get<Build>(`/builds/${buildAtual.id}`);
-        setBuildAtual(atualizado);
-        if (STATUS_FINAIS.includes(atualizado.status)) recarregarBuilds();
-      } catch (e) {
-        setErroBuild(e instanceof Error ? e.message : 'Erro ao acompanhar a compilação');
-      }
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [buildAtual, recarregarBuilds]);
+    if (!buildEmAndamento) return;
+    const timer = window.setInterval(() => void atualizarBuildAtual(), INTERVALO_POLLING_MS);
+    return () => window.clearInterval(timer);
+    // atualizarBuildAtual depende só de buildId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildEmAndamento, buildId]);
 
   async function carregarArquivo(caminho: string) {
     if (pid === undefined) return;
@@ -385,6 +410,14 @@ export function EditorProjeto() {
                 <Gravador build={buildAtual} />
               </div>
             )}
+
+            <details
+              open={monitorAberto}
+              onToggle={(e) => setMonitorAberto(e.currentTarget.open)}
+            >
+              <summary>Monitor serial</summary>
+              {monitorAberto && <MonitorSerial compacto />}
+            </details>
           </Cartao>
         </aside>
       </div>

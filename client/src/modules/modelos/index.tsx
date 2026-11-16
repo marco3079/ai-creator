@@ -1,9 +1,11 @@
+import { lazy } from 'react';
 import type { RotaModulo } from '../../lib/rotas';
 import type { Perfil } from '../../lib/tipos';
-import { DetalheModelo } from './Detalhe';
-import { Lista } from './Lista';
-import { NovoModelo } from './NovoModelo';
 import './modelos.css';
+
+const DetalheModelo = lazy(() => import('./Detalhe').then((m) => ({ default: m.DetalheModelo })));
+const Lista = lazy(() => import('./Lista').then((m) => ({ default: m.Lista })));
+const NovoModelo = lazy(() => import('./NovoModelo').then((m) => ({ default: m.NovoModelo })));
 
 const PERFIS: Perfil[] = ['ADMIN', 'DEV', 'LEITOR'];
 

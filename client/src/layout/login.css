@@ -143,6 +143,14 @@
   color: var(--cor-texto-suave);
 }
 
+/* Regras de senha (tela de troca de senha). */
+.entrada-regras {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+  color: var(--cor-texto-suave);
+}
+
 .entrada-botao {
   display: flex;
   margin-top: 0.5rem;

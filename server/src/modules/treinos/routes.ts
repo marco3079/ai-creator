@@ -8,6 +8,9 @@ import { config } from '../../lib/config';
 import { ErroHttp, idParam, rota } from '../../lib/erros';
 import { autenticar, exigirInterno, exigirPerfil } from '../../lib/auth';
 import { caminhoDados } from '../../lib/arquivos';
+import { emitirEvento } from '../../lib/eventos';
+import { acordarFila } from '../fila/despachante';
+import { enviarPedido, type ResultadoEnvio } from '../fila/servicos';
 
 const router = Router();
 
@@ -87,27 +90,23 @@ const camposResumo = {
   finalizadoEm: true,
 } as const;
 
-// Envia o pedido ao trainer. Devolve false se o trainer não responder ou recusar.
-async function enviarAoTrainer(treinoId: number, caminhoArquivo: string, cfg: ConfigTinyml): Promise<boolean> {
-  const corpo = {
-    treinoId,
-    csv: caminhoDados(caminhoArquivo),
-    saidaDir: caminhoDados('treinos', String(treinoId)),
-    config: cfg,
-    callbackUrl: `${config.serverUrlInterno}/api/interno/treinos/${treinoId}`,
-    callbackToken: config.internoToken,
-  };
-  try {
-    const resposta = await fetch(`${config.trainerUrl}/treinos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpo),
-      signal: AbortSignal.timeout(10_000),
-    });
-    return resposta.ok;
-  } catch {
-    return false;
-  }
+// Envia o treino (já em EXECUTANDO na fila) ao trainer. Devolve 'ok', 'indisponivel' ou {erro}; não muda o status.
+export async function enviarTreinoAgente(treinoId: number): Promise<ResultadoEnvio> {
+  const treino = await prisma.treino.findUnique({ where: { id: treinoId }, include: { dataset: true } });
+  if (!treino) return { erro: 'Treino não encontrado' };
+  const cfg = treino.parametros as unknown as ConfigTinyml;
+  return enviarPedido(
+    `${config.trainerUrl}/treinos`,
+    {
+      treinoId,
+      csv: caminhoDados(treino.dataset.caminhoArquivo),
+      saidaDir: caminhoDados('treinos', String(treinoId)),
+      config: cfg,
+      callbackUrl: `${config.serverUrlInterno}/api/interno/treinos/${treinoId}`,
+      callbackToken: config.internoToken,
+    },
+    10_000,
+  );
 }
 
 async function buscarTreino(id: number) {
@@ -132,7 +131,7 @@ async function enviarArquivoDoTreino(
   });
 }
 
-// POST /agentes/:id/treinar — cria o Treino (FILA), envia ao trainer e marca EXECUTANDO
+// POST /agentes/:id/treinar — cria o Treino na FILA; o despachante envia ao trainer.
 router.post('/agentes/:id/treinar', autenticar, exigirPerfil('ADMIN', 'DEV'), rota(async (req, res) => {
   const agenteId = idParam(req);
   const { datasetId, parametros } = treinarSchema.parse(req.body);
@@ -150,23 +149,10 @@ router.post('/agentes/:id/treinar', autenticar, exigirPerfil('ADMIN', 'DEV'), ro
   const treino = await prisma.treino.create({
     data: { agenteId, datasetId, status: 'FILA', parametros: cfg as Prisma.InputJsonObject },
   });
+  emitirEvento({ tipo: 'treino', id: treino.id, status: 'FILA', agenteId });
+  acordarFila();
 
-  const aceito = await enviarAoTrainer(treino.id, dataset.caminhoArquivo, cfg);
-  if (aceito) {
-    // updateMany só muda se ainda estiver na FILA: o callback EXECUTANDO do trainer pode ter chegado antes.
-    await prisma.treino.updateMany({
-      where: { id: treino.id, status: 'FILA' },
-      data: { status: 'EXECUTANDO', iniciadoEm: new Date() },
-    });
-  } else {
-    await prisma.treino.update({
-      where: { id: treino.id },
-      data: { status: 'FALHA', log: 'Serviço de treino indisponível', finalizadoEm: new Date() },
-    });
-  }
-
-  const atual = await prisma.treino.findUnique({ where: { id: treino.id } });
-  res.status(201).json(atual);
+  res.status(201).json(await buscarTreino(treino.id));
 }));
 
 // GET /treinos?agenteId=
@@ -205,8 +191,9 @@ router.post('/interno/treinos/:id', exigirInterno, rota(async (req, res) => {
   const corpo = callbackSchema.parse(req.body);
   const treino = await buscarTreino(id);
 
-  const dados: Prisma.TreinoUpdateInput = { status: corpo.status };
-  if (corpo.log) dados.log = treino.log ? `${treino.log}\n${corpo.log}` : corpo.log;
+  const dados: Prisma.TreinoUpdateManyMutationInput = { status: corpo.status };
+  if (corpo.log) dados.log = treino.log ? `${treino.log}
+${corpo.log}` : corpo.log;
   if (corpo.metricas !== undefined) dados.metricas = corpo.metricas as Prisma.InputJsonObject;
   if (corpo.modeloTflite !== undefined) dados.modeloTflite = corpo.modeloTflite;
   if (corpo.modeloH !== undefined) dados.modeloH = corpo.modeloH;
@@ -214,7 +201,19 @@ router.post('/interno/treinos/:id', exigirInterno, rota(async (req, res) => {
   if (corpo.status === 'EXECUTANDO' && !treino.iniciadoEm) dados.iniciadoEm = new Date();
   if (corpo.status === 'SUCESSO' || corpo.status === 'FALHA') dados.finalizadoEm = new Date();
 
-  await prisma.treino.update({ where: { id }, data: dados });
+  // updateMany: um cancelamento que chegou antes não é sobrescrito.
+  const gravados = await prisma.treino.updateMany({
+    // EXECUTANDO só vale enquanto FILA/EXECUTANDO (não volta atrás de SUCESSO/FALHA); finais respeitam CANCELADO.
+    where: corpo.status === 'EXECUTANDO'
+      ? { id, status: { in: ['FILA', 'EXECUTANDO'] } }
+      : { id, status: { not: 'CANCELADO' } },
+    data: dados,
+  });
+  if (gravados.count === 0) {
+    res.status(204).end();
+    return;
+  }
+  emitirEvento({ tipo: 'treino', id, status: corpo.status, agenteId: treino.agenteId });
 
   if (corpo.status === 'SUCESSO') {
     const agente = await prisma.agente.findUnique({ where: { id: treino.agenteId } });

@@ -1,0 +1,13 @@
+{
+  "name": "ai-creator-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Testes ponta a ponta (Playwright) do AI Creator contra o stack do docker compose.",
+  "scripts": {
+    "test": "playwright test",
+    "test:relatorio": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}

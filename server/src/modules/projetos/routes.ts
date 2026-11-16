@@ -1,18 +1,14 @@
-import { Router, Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
+import { Router, Request } from 'express';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
-import { config } from '../../lib/config';
 import { ErroHttp, rota } from '../../lib/erros';
 import { autenticar, exigirPerfil } from '../../lib/auth';
-import { caminhoDados } from '../../lib/arquivos';
 import { gerarSlug, slugUnico } from '../../lib/slug';
 import { registrar } from '../../lib/log';
-import { ConfigTinyml } from '../agentes/padroes';
 import { validarCaminho } from './caminhos';
 import { Placa, PLACAS_PROJETO, arquivosModelo, iniPara } from './modelos';
+import { criarBuild } from './build';
 
 const router = Router();
 
@@ -47,13 +43,8 @@ const BuildEsquema = z.object({
   modeloTreinoId: z.number().int().positive().optional(),
 });
 
-// Artefato de um treino da área Modelos (CONTRATOS-MODELOS §1).
-interface ArtefatoTreino {
-  nome: string;
-  tipo: string;
-  caminho: string;
-  tamanhoBytes: number;
-}
+// Modelo de firmware do projeto novo (A05 implementa; OTA cai em BLINK até a leva B).
+const ModeloFirmwareEsquema = z.enum(['BLINK', 'COLETOR', 'OTA']).optional();
 
 // Aceita id numérico ou slug na URL.
 function filtroProjeto(ref: string): Prisma.ProjetoWhereInput {
@@ -86,25 +77,6 @@ async function gerarSlugProjeto(nome: string): Promise<string> {
   return slugUnico(gerarSlug(nome), async (s) => {
     return (await prisma.projeto.findUnique({ where: { slug: s } })) !== null;
   });
-}
-
-// Grava os arquivos do banco em /data/projetos/<slug>, preservando a pasta .pio (cache do PlatformIO).
-function escreverProjetoEmDisco(projeto: { slug: string; arquivos: { caminho: string; conteudo: string }[] }): string {
-  const pasta = caminhoDados('projetos', projeto.slug);
-  fs.mkdirSync(pasta, { recursive: true });
-  for (const item of fs.readdirSync(pasta)) {
-    if (item === '.pio') {
-      continue;
-    }
-    fs.rmSync(path.join(pasta, item), { recursive: true, force: true });
-  }
-  for (const arquivo of projeto.arquivos) {
-    const relativo = validarCaminho(arquivo.caminho);
-    const destino = path.join(pasta, relativo);
-    fs.mkdirSync(path.dirname(destino), { recursive: true });
-    fs.writeFileSync(destino, arquivo.conteudo, 'utf8');
-  }
-  return pasta;
 }
 
 // Lista de projetos (mais recentes primeiro).
@@ -142,6 +114,7 @@ router.post(
   ESCRITA,
   rota(async (req, res) => {
     const corpo = ProjetoEsquema.parse(req.body);
+    const modelo = ModeloFirmwareEsquema.parse((req.body as { modelo?: unknown })?.modelo) ?? 'BLINK';
     const slug = await gerarSlugProjeto(corpo.nome);
     const projeto = await prisma.projeto.create({
       data: {
@@ -149,7 +122,7 @@ router.post(
         slug,
         descricao: corpo.descricao ?? '',
         placa: corpo.placa,
-        arquivos: { create: arquivosModelo(corpo.placa, corpo.nome) },
+        arquivos: { create: arquivosModelo(corpo.placa, corpo.nome, modelo) },
       },
       include: {
         arquivos: { select: { caminho: true, atualizadoEm: true }, orderBy: { caminho: 'asc' } },
@@ -314,118 +287,20 @@ router.delete(
   })
 );
 
-// Compila o projeto: grava os arquivos em disco, embute o modelo do agente (se houver) e chama o builder.
+// Compila o projeto: valida o pedido e enfileira o Build (FILA). A fila envia ao builder.
 router.post(
   '/projetos/:id/build',
   autenticar,
   ESCRITA,
-  rota(async (req: Request, res: Response) => {
+  rota(async (req: Request, res) => {
     const projetoAtual = await buscarProjeto(req);
     const corpo = BuildEsquema.parse(req.body ?? {});
-
-    const projeto = await prisma.projeto.findUnique({
-      where: { id: projetoAtual.id },
-      include: { arquivos: { select: { caminho: true, conteudo: true } } },
-    });
-    if (!projeto) {
-      throw new ErroHttp(404, 'Projeto não encontrado');
-    }
-
-    // Modelo TinyML do último treino do agente, se informado.
-    let origemModelo: string | null = null;
-    if (corpo.agenteId) {
-      const agente = await prisma.agente.findUnique({ where: { id: corpo.agenteId } });
-      if (!agente) {
-        throw new ErroHttp(404, 'Agente não encontrado');
-      }
-      const cfgTinyml = (agente.configTinyml as unknown as ConfigTinyml | null) ?? null;
-      const ultimoTreinoId = cfgTinyml?.ultimoTreinoId ?? null;
-      if (ultimoTreinoId) {
-        const treino = await prisma.treino.findUnique({ where: { id: ultimoTreinoId } });
-        if (treino?.modeloH) {
-          origemModelo = path.join(config.dataDir, treino.modeloH);
-          if (!fs.existsSync(origemModelo)) {
-            throw new ErroHttp(400, 'O modelo do último treino do agente não foi encontrado');
-          }
-        }
-      }
-    }
-
-    // Treino da área Modelos: seus artefatos HEADER_C vão para include/. Valida antes de gravar nada.
-    const headersTreino: { origem: string; nome: string }[] = [];
-    if (corpo.modeloTreinoId) {
-      const treino = await prisma.treinoModelo.findUnique({
-        where: { id: corpo.modeloTreinoId },
-        include: { modelo: { select: { tipo: true } } },
-      });
-      const tipoOk = treino?.modelo.tipo === 'TINYML' || treino?.modelo.tipo === 'TABULAR';
-      if (!treino || treino.status !== 'SUCESSO' || !tipoOk) {
-        throw new ErroHttp(400, 'Escolha um treino concluído com sucesso de um modelo TinyML ou Tabular');
-      }
-      const artefatos = (treino.artefatos as unknown as ArtefatoTreino[] | null) ?? [];
-      for (const artefato of artefatos.filter((a) => a.tipo === 'HEADER_C')) {
-        const origem = path.join(config.dataDir, artefato.caminho);
-        if (!fs.existsSync(origem)) {
-          throw new ErroHttp(400, `O artefato ${artefato.nome} do treino não foi encontrado`);
-        }
-        headersTreino.push({ origem, nome: path.basename(artefato.nome) });
-      }
-    }
-
-    // Grava os arquivos antes de criar o Build, para não deixar registro órfão se a gravação falhar.
-    const pasta = escreverProjetoEmDisco(projeto);
-    if (origemModelo) {
-      const destinoModelo = path.join(pasta, 'include', 'model_data.h');
-      fs.mkdirSync(path.dirname(destinoModelo), { recursive: true });
-      fs.copyFileSync(origemModelo, destinoModelo);
-    }
-    for (const header of headersTreino) {
-      const destino = path.join(pasta, 'include', header.nome);
-      fs.mkdirSync(path.dirname(destino), { recursive: true });
-      fs.copyFileSync(header.origem, destino);
-    }
-
-    const build = await prisma.build.create({
-      data: {
-        projetoId: projeto.id,
-        placa: projeto.placa,
-        agenteId: corpo.agenteId ?? null,
-        modeloTreinoId: corpo.modeloTreinoId ?? null,
-        status: 'FILA',
-      },
-    });
-
-    await prisma.build.update({ where: { id: build.id }, data: { status: 'EXECUTANDO' } });
-
-    let indisponivel = false;
-    try {
-      const resposta = await fetch(`${config.builderUrl}/builds`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          buildId: build.id,
-          projetoDir: `/data/projetos/${projeto.slug}`,
-          placa: projeto.placa,
-          saidaDir: `/data/builds/${build.id}`,
-          callbackUrl: `${config.serverUrlInterno}/api/interno/builds/${build.id}`,
-          callbackToken: config.internoToken,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      indisponivel = !resposta.ok;
-    } catch {
-      indisponivel = true;
-    }
-
-    const atualizado = indisponivel
-      ? await prisma.build.update({
-          where: { id: build.id },
-          data: { status: 'FALHA', log: 'Serviço de compilação indisponível', finalizadoEm: new Date() },
-        })
-      : await prisma.build.findUnique({ where: { id: build.id } });
-
-    await registrar(req.usuario?.id ?? null, 'build.criar', `${projeto.nome} (#${build.id})`);
-    res.status(202).json(atualizado);
+    const build = await criarBuild(
+      projetoAtual.id,
+      { agenteId: corpo.agenteId, modeloTreinoId: corpo.modeloTreinoId },
+      req.usuario?.id ?? null,
+    );
+    res.status(202).json(build);
   })
 );
 

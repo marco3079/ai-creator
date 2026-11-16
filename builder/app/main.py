@@ -3,6 +3,7 @@
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 
+from app import ativos
 from app.compilar import executar_build
 from app.gravar import gravar
 from app.placas import PLACAS
@@ -31,19 +32,31 @@ def saude() -> dict:
     return {"ok": True}
 
 
+@app.get("/trabalhos")
+def trabalhos() -> dict:
+    return ativos.listar()
+
+
+def _build_em_segundo_plano(corpo: NovoBuild) -> None:
+    try:
+        executar_build(
+            corpo.buildId,
+            corpo.projetoDir,
+            corpo.placa,
+            corpo.saidaDir,
+            corpo.callbackUrl,
+            corpo.callbackToken,
+        )
+    finally:
+        ativos.desmarcar("builds", corpo.buildId)
+
+
 @app.post("/builds", status_code=202)
 def criar_build(corpo: NovoBuild, tarefas: BackgroundTasks) -> dict:
     if corpo.placa not in PLACAS:
         raise HTTPException(status_code=400, detail=f"Placa desconhecida: {corpo.placa}")
-    tarefas.add_task(
-        executar_build,
-        corpo.buildId,
-        corpo.projetoDir,
-        corpo.placa,
-        corpo.saidaDir,
-        corpo.callbackUrl,
-        corpo.callbackToken,
-    )
+    ativos.marcar("builds", corpo.buildId)
+    tarefas.add_task(_build_em_segundo_plano, corpo)
     return {"ok": True, "buildId": corpo.buildId}
 
 

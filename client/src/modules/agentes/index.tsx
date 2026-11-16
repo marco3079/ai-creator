@@ -1,8 +1,10 @@
+import { lazy } from 'react';
 import type { RotaModulo } from '../../lib/rotas';
 import type { Perfil } from '../../lib/tipos';
-import { Editor } from './Editor';
-import { Lista } from './Lista';
 import './agentes.css';
+
+const Editor = lazy(() => import('./Editor').then((m) => ({ default: m.Editor })));
+const Lista = lazy(() => import('./Lista').then((m) => ({ default: m.Lista })));
 
 const PERFIS: Perfil[] = ['ADMIN', 'DEV', 'LEITOR'];
 

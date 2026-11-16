@@ -186,6 +186,13 @@ export function validarCompatibilidade(tipo: TipoModelo, tarefa: TarefaModelo, d
   if (tarefa !== 'IMAGEM' && datasetTipo === 'IMAGENS') {
     throw new ErroHttp(400, 'Dataset de IMAGENS só serve à tarefa de classificação de imagens.');
   }
+  // Palavra-chave (AUDIO) precisa de dataset SONS (pastas de .wav), e dataset SONS só serve a essa tarefa.
+  if (tarefa === 'AUDIO' && datasetTipo !== 'SONS') {
+    throw new ErroHttp(400, 'A tarefa de palavra-chave (áudio) precisa de um dataset de SONS.');
+  }
+  if (tarefa !== 'AUDIO' && datasetTipo === 'SONS') {
+    throw new ErroHttp(400, 'Dataset de SONS só serve à tarefa de palavra-chave (áudio).');
+  }
 }
 
 const CHAVES_SUBSTITUIDAS = new Set(['hiperparametros']);

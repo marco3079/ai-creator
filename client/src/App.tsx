@@ -1,11 +1,19 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from './lib/auth';
 import { caminhoDoPerfil, Layout } from './layout/Layout';
 import { Login } from './layout/Login';
-import { Pagina } from './ui';
+import { Carregando, Pagina } from './ui';
 import type { RotaModulo } from './lib/rotas';
 import type { Perfil } from './lib/tipos';
+
+// Tela de troca de senha (fora do Layout). Carregada sob demanda.
+const TrocarSenha = lazy(() =>
+  import('./layout/TrocarSenha').then((m) => ({ default: m.TrocarSenha })),
+);
+
+const CAMINHO_TROCAR_SENHA = '/trocar-senha';
 
 // Junta as rotas de todos os módulos em src/modules/<modulo>/index.tsx
 const modulos = import.meta.glob<{ rotas: RotaModulo[] }>('./modules/*/index.tsx', {
@@ -18,9 +26,19 @@ const ROTAS: RotaModulo[] = Object.values(modulos)
 
 function LayoutDoPerfil() {
   const { usuario } = useAuth();
+  const { pathname } = useLocation();
   if (!usuario) return <Navigate to="/login" replace />;
+  if (usuario.trocarSenha && pathname !== CAMINHO_TROCAR_SENHA) {
+    return <Navigate to={CAMINHO_TROCAR_SENHA} replace />;
+  }
   const menu = ROTAS.filter((r) => r.perfis.includes(usuario.perfil) && r.menu !== false);
   return <Layout menu={menu} />;
+}
+
+function ExigeLogin({ children }: { children: ReactNode }) {
+  const { usuario } = useAuth();
+  if (!usuario) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 }
 
 function RotaProtegida({ perfis, children }: { perfis: Perfil[]; children: ReactNode }) {
@@ -55,12 +73,26 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Raiz />} />
+      <Route
+        path={CAMINHO_TROCAR_SENHA}
+        element={
+          <ExigeLogin>
+            <Suspense fallback={<Carregando />}>
+              <TrocarSenha />
+            </Suspense>
+          </ExigeLogin>
+        }
+      />
       <Route element={<LayoutDoPerfil />}>
         {ROTAS.map((r) => (
           <Route
             key={r.caminho}
             path={r.caminho}
-            element={<RotaProtegida perfis={r.perfis}>{r.elemento}</RotaProtegida>}
+            element={
+              <Suspense fallback={<Carregando />}>
+                <RotaProtegida perfis={r.perfis}>{r.elemento}</RotaProtegida>
+              </Suspense>
+            }
           />
         ))}
         <Route path="*" element={<NaoEncontrada />} />

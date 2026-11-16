@@ -15,9 +15,20 @@ export const PlacaModeloEsquema = z.enum([
 const regexSufixo = /^[a-z0-9-]{0,18}$/;
 const regexNomeOllama = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
 
+// Parâmetros do front-end de áudio (tarefa AUDIO). O padrão cobre configs antigas, sem a chave `audio`.
+export const AudioEsquema = z
+  .object({
+    taxaHz: z.number().int().min(8000).max(48000).default(16000),
+    duracaoMs: z.number().int().min(250).max(2000).default(1000),
+    janelaMs: z.number().int().min(10).max(64).default(30),
+    passoMs: z.number().int().min(10).max(40).default(20),
+    canaisMel: z.number().int().min(10).max(80).default(40),
+  })
+  .default({ taxaHz: 16000, duracaoMs: 1000, janelaMs: 30, passoMs: 20, canaisMel: 40 });
+
 export const ConfigTinymlEsquema = z.object({
   entrada: z.object({
-    tipo: z.enum(['SERIE_TEMPORAL', 'AUDIO', 'TABELA', 'IMAGENS']),
+    tipo: z.enum(['SERIE_TEMPORAL', 'AUDIO', 'TABELA', 'IMAGENS', 'SONS']),
     canais: z.number().int().min(1).max(32),
     janela: z.number().int().min(1).max(10000),
     frequenciaHz: z.number().positive().max(100000),
@@ -26,6 +37,7 @@ export const ConfigTinymlEsquema = z.object({
       altura: z.number().int().min(16).max(320),
       cores: z.union([z.literal(1), z.literal(3)]),
     }),
+    audio: AudioEsquema,
   }),
   arquitetura: z.enum(['DENSA', 'CNN1D', 'DS_CNN', 'CNN2D']),
   camadas: z.number().int().min(1).max(6),
@@ -93,7 +105,7 @@ export function esquemaConfig(tipo: TipoModelo) {
 }
 
 const TipoModeloEsquema = z.enum(['TINYML', 'TABULAR', 'LLM_NUVEM', 'LLM_LOCAL']);
-const TarefaModeloEsquema = z.enum(['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM', 'CHAT']);
+const TarefaModeloEsquema = z.enum(['CLASSIFICACAO', 'REGRESSAO', 'IMAGEM', 'AUDIO', 'CHAT']);
 const TagsEsquema = z.array(z.string().trim().min(1).max(40)).max(20);
 
 // POST /modelos — config é parcial e é mesclada sobre configPadrao.

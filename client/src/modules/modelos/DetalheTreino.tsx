@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useEventosTrabalho } from '../../lib/eventos';
 import { corStatus, rotuloStatus } from '../../lib/tipos-api';
 import type { Modelo, TreinoModelo, MetricasModelo } from '../../lib/tipos-modelos';
 import { Aviso, Botao, Carregando, Cartao, Selo, formatarDataHora } from '../../ui';
@@ -10,7 +11,8 @@ import { GraficoHistorico } from './GraficoHistorico';
 
 // Detalhe de um treino: status, log, métricas, histórico, matriz, validação cruzada, artefatos e ações.
 
-const INTERVALO_POLLING_MS = 3000;
+// Polling de segurança enquanto o treino está na fila ou executando (os eventos ao vivo fazem o resto).
+const INTERVALO_POLLING_MS = 20000;
 
 function emAndamento(status: string): boolean {
   return status === 'FILA' || status === 'EXECUTANDO';
@@ -82,8 +84,6 @@ export function DetalheTreino({
   const [carregando, setCarregando] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [copiado, setCopiado] = useState(false);
-  // Muda a cada resposta (com sucesso ou erro): mantém o polling vivo mesmo se uma leitura falhar.
-  const [ciclo, setCiclo] = useState(0);
   const viva = useRef(true);
   const logRef = useRef<HTMLPreElement>(null);
 
@@ -106,7 +106,6 @@ export function DetalheTreino({
     } finally {
       if (viva.current) {
         setCarregando(false);
-        setCiclo((c) => c + 1);
       }
     }
   }
@@ -117,13 +116,20 @@ export function DetalheTreino({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [treinoId]);
 
+  // Recarrega quando o servidor avisa uma mudança neste treino.
+  useEventosTrabalho(
+    (e) => e.tipo === 'treinoModelo' && e.id === treinoId,
+    () => void carregar(),
+  );
+
+  // Polling de segurança a cada 20 s enquanto o treino está na fila ou executando.
   const andamento = treino !== null && emAndamento(treino.status);
   useEffect(() => {
     if (!andamento) return;
-    const t = window.setTimeout(() => void carregar(), INTERVALO_POLLING_MS);
-    return () => window.clearTimeout(t);
+    const t = window.setInterval(() => void carregar(), INTERVALO_POLLING_MS);
+    return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [andamento, ciclo]);
+  }, [andamento]);
 
   // Auto-scroll do log: acompanha o fim enquanto o usuário não rolou para cima.
   const logAtual = treino?.log ?? '';

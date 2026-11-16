@@ -1,6 +1,8 @@
+import { lazy } from 'react';
 import type { RotaModulo } from '../../lib/rotas';
-import { Datasets } from './Datasets';
 import './tinyml.css';
+
+const Datasets = lazy(() => import('./Datasets').then((m) => ({ default: m.Datasets })));
 
 export const rotas: RotaModulo[] = [
   {

@@ -9,6 +9,7 @@ const CHAVE_USUARIO = 'aicreator.usuario';
 interface AuthContexto {
   usuario: UsuarioLogado | null;
   entrar(email: string, senha: string): Promise<void>;
+  trocarSenha(senhaAtual: string, novaSenha: string): Promise<void>;
   sair(): void;
 }
 
@@ -38,6 +39,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsuario(resposta.usuario);
   }
 
+  // Troca a senha do usuário logado; o servidor devolve novo token (senha antiga deixa de valer nas sessões novas).
+  async function trocarSenha(senhaAtual: string, novaSenha: string): Promise<void> {
+    const resposta = await api.post<{ token: string; usuario: UsuarioLogado }>('/auth/trocar-senha', {
+      senhaAtual,
+      novaSenha,
+    });
+    localStorage.setItem(CHAVE_TOKEN, resposta.token);
+    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(resposta.usuario));
+    setUsuario(resposta.usuario);
+  }
+
   function sair(): void {
     // Avisa o servidor antes de limpar o token (o cabeçalho Authorization é lido agora). Sem esperar a resposta.
     api.post('/auth/sair').catch(() => undefined);
@@ -46,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsuario(null);
   }
 
-  return <Contexto.Provider value={{ usuario, entrar, sair }}>{children}</Contexto.Provider>;
+  return <Contexto.Provider value={{ usuario, entrar, trocarSenha, sair }}>{children}</Contexto.Provider>;
 }
 
 export function useAuth(): AuthContexto {

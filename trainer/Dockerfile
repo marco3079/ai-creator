@@ -7,6 +7,8 @@ WORKDIR /srv
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# tf-keras sem as dependências: o pip não puxa o pacote 'tensorflow' completo (só o tensorflow-cpu).
+RUN pip install --no-cache-dir --no-deps tf-keras==2.16.0
 
 COPY app ./app
 

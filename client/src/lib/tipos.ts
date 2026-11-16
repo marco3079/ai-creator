@@ -5,6 +5,8 @@ export interface UsuarioLogado {
   nome: string;
   email: string;
   perfil: Perfil;
+  // true quando o sistema exige a troca da senha antes de usar as demais telas.
+  trocarSenha?: boolean;
 }
 
 // Nomes de perfil mostrados na tela (menu do usuário e cabeçalho).

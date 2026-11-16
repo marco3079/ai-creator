@@ -1,7 +1,7 @@
-"""Treino TinyML: CLASSIFICACAO e REGRESSAO (CSV) e IMAGEM (pastas por classe).
+"""Treino TinyML: CLASSIFICACAO e REGRESSAO (CSV), IMAGEM (pastas por classe) e AUDIO (pastas de .wav por palavra).
 
-Gera model.tflite, model_data.h e metricas.json em `saidaDir` e devolve os
-artefatos e as métricas pelo callback `enviar`.
+Gera model.tflite, model_data.h e metricas.json em `saidaDir` (AUDIO também
+features_audio.h) e devolve os artefatos e as métricas pelo callback `enviar`.
 
 O TensorFlow só é importado dentro das funções que precisam dele: as funções
 puras (escolher_principal, metricas_regressao, montar_artefatos) podem ser
@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from app import exportar
+from app.modelos import audio as kws
 
 ARQUIVO_FINAL = '.final'  # mesmo nome usado por app.modelos.executar
 SEMENTE = 42
@@ -24,6 +25,12 @@ PACIENCIA = 10
 DROPOUT = 0.2
 EPOCAS_POR_ENVIO = 5
 DATA_DIR = os.environ.get('DATA_DIR', '/data')
+# AUDIO: aumento de dados só no treino (deslocamento no tempo e ruído).
+DESLOCAMENTO_MAX_MS = 100
+COPIAS_AUMENTO = 2
+AMPLITUDE_RUIDO = 0.005
+# BN do DS-CNN: com poucos passos por época, o padrão (0.99) deixa as estatísticas de inferência defasadas.
+BN_MOMENTUM = 0.9
 
 
 class _Log:
@@ -403,6 +410,183 @@ def _treinar_imagem(pedido: dict, cfg: dict, log: _Log):
     return tflite, metricas, historico
 
 
+def _classes_sons(pasta: Path) -> list[str]:
+    """Pastas de classe de um dataset SONS (ignora ocultas e __MACOSX)."""
+    return sorted(
+        p.name for p in pasta.iterdir()
+        if p.is_dir() and not p.name.startswith('.') and p.name != '__MACOSX'
+    )
+
+
+def _carregar_sons(pasta: Path, classes: list[str], audio: dict) -> tuple[list[np.ndarray], np.ndarray]:
+    """Ondas (taxa e duração do config) e rótulos (índice da classe) de todos os .wav das pastas."""
+    ondas: list[np.ndarray] = []
+    rotulos: list[int] = []
+    for indice, classe in enumerate(classes):
+        pasta_classe = pasta / classe
+        if not pasta_classe.is_dir():
+            raise ValueError(f'O dataset não tem a pasta da classe "{classe}"')
+        arquivos = sorted(
+            p for p in pasta_classe.iterdir()
+            if p.is_file() and not p.name.startswith('.') and p.suffix.lower() == '.wav'
+        )
+        if not arquivos:
+            raise ValueError(f'A classe "{classe}" não tem arquivos .wav')
+        for arquivo in arquivos:
+            ondas.append(kws.preparar_onda(arquivo.read_bytes(), audio))
+            rotulos.append(indice)
+    return ondas, np.asarray(rotulos, dtype=np.int64)
+
+
+def _aumentar_onda(onda: np.ndarray, rng, max_deslocamento: int) -> np.ndarray:
+    """Desloca no tempo (com silêncio) até `max_deslocamento` amostras e soma ruído leve."""
+    deslocamento = int(rng.integers(-max_deslocamento, max_deslocamento + 1))
+    if deslocamento > 0:
+        x = np.concatenate([np.zeros(deslocamento, dtype=np.float32), onda[:-deslocamento]])
+    elif deslocamento < 0:
+        x = np.concatenate([onda[-deslocamento:], np.zeros(-deslocamento, dtype=np.float32)])
+    else:
+        x = onda.copy()
+    ruido = rng.normal(0.0, AMPLITUDE_RUIDO, size=x.shape).astype(np.float32)
+    return np.clip(x + ruido, -1.0, 1.0).astype(np.float32)
+
+
+def _construir_ds_cnn(cfg: dict, forma: tuple, num_classes: int, log: _Log, media: float, desvio: float):
+    """DS-CNN 2D: Rescaling (normalização do treino) + Conv 3×3 + camadas × [DepthwiseConv 3×3 + Conv 1×1 + BN + ReLU]
+    + média global + softmax."""
+    import tensorflow as tf
+
+    filtros = int(cfg['neuronios'])
+    entrada = tf.keras.Input(shape=forma)
+    # (x - media) / desvio, como primeira camada: a entrada do modelo são as features brutas.
+    h = tf.keras.layers.Rescaling(scale=1.0 / desvio, offset=-media / desvio)(entrada)
+    h = tf.keras.layers.Conv2D(filtros, 3, padding='same', use_bias=False)(h)
+    h = tf.keras.layers.BatchNormalization(momentum=BN_MOMENTUM)(h)
+    h = tf.keras.layers.ReLU()(h)
+    for _ in range(int(cfg['camadas'])):
+        h = tf.keras.layers.DepthwiseConv2D(3, padding='same', use_bias=False)(h)
+        h = tf.keras.layers.BatchNormalization(momentum=BN_MOMENTUM)(h)
+        h = tf.keras.layers.ReLU()(h)
+        h = tf.keras.layers.Conv2D(filtros, 1, padding='same', use_bias=False)(h)
+        h = tf.keras.layers.BatchNormalization(momentum=BN_MOMENTUM)(h)
+        h = tf.keras.layers.ReLU()(h)
+    h = tf.keras.layers.GlobalAveragePooling2D()(h)
+    saida = tf.keras.layers.Dense(num_classes, activation='softmax')(h)
+    modelo = tf.keras.Model(entrada, saida)
+    modelo.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=float(cfg['taxaAprendizado'])),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy'],
+    )
+    log.adicionar(f'Arquitetura: DS_CNN, {modelo.count_params()} parâmetros.')
+    return modelo
+
+
+def _treinar_audio(pedido: dict, cfg: dict, log: _Log):
+    import tensorflow as tf
+    from sklearn.model_selection import train_test_split
+
+    dataset = pedido['dataset']
+    pasta = Path(dataset['caminho'])
+    classes = list(dataset.get('classes') or []) or _classes_sons(pasta)
+    if len(classes) < 2:
+        raise ValueError('AUDIO precisa de pelo menos 2 classes (pastas)')
+
+    audio = dict(cfg['entrada']['audio'])
+    ondas, rotulos = _carregar_sons(pasta, classes, audio)
+    indices = np.arange(len(ondas))
+    try:
+        treino_idx, val_idx = train_test_split(
+            indices, test_size=PROPORCAO_TESTE, random_state=SEMENTE, stratify=rotulos
+        )
+    except ValueError as erro:
+        raise ValueError(
+            'Não foi possível dividir os áudios em treino e validação (cada classe precisa de pelo menos 2 arquivos .wav)'
+        ) from erro
+
+    # Features: o micro-frontend do TFLite quando existir; senão log-mel (avisado no log).
+    if kws.usa_micro_frontend():
+        origem_features = 'micro-frontend do TFLite'
+    else:
+        origem_features = 'log-mel (tf.signal)'
+        log.adicionar(
+            'AVISO: micro-frontend do TFLite indisponível; features em log-mel. '
+            'A placa precisa calcular exatamente o mesmo pré-processamento.'
+        )
+
+    aumentar = bool(cfg.get('aumentoDados'))
+    max_deslocamento = int(kws.amostras_de_ms(DESLOCAMENTO_MAX_MS, int(audio.get('taxaHz', kws.TAXA_HZ_PADRAO))))
+    rng = np.random.default_rng(SEMENTE)
+    ondas_treino, rotulos_treino = [], []
+    for i in treino_idx:
+        ondas_treino.append(ondas[i])
+        rotulos_treino.append(rotulos[i])
+        if aumentar:
+            for _ in range(COPIAS_AUMENTO):
+                ondas_treino.append(_aumentar_onda(ondas[i], rng, max_deslocamento))
+                rotulos_treino.append(rotulos[i])
+
+    x_treino = np.stack([kws.features_de_onda(o, audio) for o in ondas_treino])
+    x_val = np.stack([kws.features_de_onda(ondas[i], audio) for i in val_idx])
+    y_treino = np.asarray(rotulos_treino, dtype=np.int64)
+    y_val = rotulos[val_idx]
+
+    # Normalização escalar (média e desvio do treino) fica DENTRO do modelo (Rescaling). As features
+    # entram brutas: a placa, o prever e o dataset representativo INT8 usam as mesmas features brutas.
+    media = float(x_treino.mean())
+    desvio = float(x_treino.std()) or 1.0
+    x_treino = x_treino.astype(np.float32)[..., np.newaxis]
+    x_val = x_val.astype(np.float32)[..., np.newaxis]
+    forma = tuple(x_treino.shape[1:])
+    log.adicionar(
+        f'Dados: classes {classes}, {len(ondas)} áudios ({len(ondas_treino)} de treino com aumento, '
+        f'{len(val_idx)} de validação), features {forma[0]}×{forma[1]} ({origem_features}), '
+        f'taxa {audio.get("taxaHz")} Hz, duração {audio.get("duracaoMs")} ms.'
+        + (' Aumento de dados: deslocamento e ruído.' if aumentar else '')
+    )
+
+    log.adicionar(f'Normalização das features (dentro do modelo): média {media:.4f}, desvio {desvio:.4f}.')
+    modelo = _construir_ds_cnn(cfg, forma, len(classes), log, media, desvio)
+    epocas = int(cfg['epocas'])
+    lote = int(cfg['tamanhoLote'])
+    log.adicionar(f'Treinando: até {epocas} épocas, lote {lote}.')
+    historico: list = []
+    parada = tf.keras.callbacks.EarlyStopping(
+        monitor='val_accuracy', mode='max', patience=max(PACIENCIA, epocas // 3), restore_best_weights=True
+    )
+    modelo.fit(
+        x_treino,
+        y_treino,
+        validation_data=(x_val, y_val),
+        epochs=epocas,
+        batch_size=lote,
+        callbacks=[parada, _criar_log_epocas(tf, log, epocas, historico, 'acuracia', 'accuracy')],
+        verbose=0,
+    )
+
+    perda_treino, acuracia_treino = modelo.evaluate(x_treino, y_treino, verbose=0)
+    perda_val, acuracia_val = modelo.evaluate(x_val, y_val, verbose=0)
+    previsoes = np.argmax(modelo.predict(x_val, verbose=0), axis=1)
+    matriz = np.zeros((len(classes), len(classes)), dtype=np.int64)
+    np.add.at(matriz, (y_val, previsoes), 1)
+
+    metricas = {
+        'acuracia': float(acuracia_treino),
+        'perda': float(perda_treino),
+        'acuraciaValidacao': float(acuracia_val),
+        'perdaValidacao': float(perda_val),
+        'matrizConfusao': matriz.tolist(),
+        'classes': classes,
+        'arquitetura': 'DS_CNN',
+        'audio': audio,
+        'quadros': forma[0],
+        'canaisMel': forma[1],
+    }
+    log.adicionar('Exportando modelo para TFLite e header C...')
+    tflite = exportar.para_tflite(modelo, x_treino, cfg['quantizacao'])
+    return tflite, metricas, historico
+
+
 # ---------------------------------------------------------------- ponto de entrada
 
 def executar_tinyml(pedido: dict, enviar) -> None:
@@ -423,6 +607,8 @@ def executar_tinyml(pedido: dict, enviar) -> None:
         tflite, metricas, historico = _treinar_regressao(pedido, cfg, log)
     elif tarefa == 'IMAGEM':
         tflite, metricas, historico = _treinar_imagem(pedido, cfg, log)
+    elif tarefa == 'AUDIO':
+        tflite, metricas, historico = _treinar_audio(pedido, cfg, log)
     else:
         raise ValueError(f'Tarefa TINYML desconhecida: {tarefa}')
 
@@ -439,19 +625,27 @@ def executar_tinyml(pedido: dict, enviar) -> None:
     caminho_tflite.write_bytes(tflite)
     caminho_h.write_text(cabecalho, encoding='utf-8')
 
+    arquivos = [
+        ('model.tflite', 'TFLITE', caminho_tflite),
+        ('model_data.h', 'HEADER_C', caminho_h),
+    ]
+    nomes_gravados = 'model.tflite, model_data.h'
+    if tarefa == 'AUDIO':
+        # Parâmetros do front-end e normalização para a placa calcular as mesmas features.
+        caminho_features = saida / 'features_audio.h'
+        caminho_features.write_text(kws.gerar_header_features(cfg['entrada']['audio']), encoding='utf-8')
+        arquivos.append(('features_audio.h', 'HEADER_C', caminho_features))
+        nomes_gravados += ', features_audio.h'
+
     metricas['historico'] = historico
     metricas['principal'] = escolher_principal(tarefa, metricas)
     caminho_metricas.write_text(json.dumps(metricas, ensure_ascii=False, indent=2), encoding='utf-8')
 
     artefatos = montar_artefatos(
-        [
-            ('model.tflite', 'TFLITE', caminho_tflite),
-            ('model_data.h', 'HEADER_C', caminho_h),
-            ('metricas.json', 'METRICAS', caminho_metricas),
-        ],
+        arquivos + [('metricas.json', 'METRICAS', caminho_metricas)],
         DATA_DIR,
     )
-    log.adicionar('Artefatos gravados: model.tflite, model_data.h, metricas.json.')
+    log.adicionar(f'Artefatos gravados: {nomes_gravados}, metricas.json.')
     log.adicionar('Treino concluído com sucesso.')
 
     (saida / ARQUIVO_FINAL).write_text('SUCESSO', encoding='utf-8')

@@ -63,6 +63,7 @@ router.post(
         email: dados.email,
         senhaHash: await bcrypt.hash(dados.senha, 10),
         perfil: dados.perfil,
+        trocarSenha: true,
       },
       select: CAMPOS,
     });
@@ -96,6 +97,8 @@ router.put(
         perfil: dados.perfil,
         ativo: dados.ativo,
         senhaHash: dados.senha ? await bcrypt.hash(dados.senha, 10) : undefined,
+        // Senha definida pelo admin para outro usuário vale só até a próxima troca.
+        trocarSenha: dados.senha ? id !== usuarioDaRota(req).id : undefined,
       },
       select: CAMPOS,
     });

@@ -68,6 +68,8 @@ async function main(): Promise<void> {
       email,
       senhaHash: await bcrypt.hash(senha, 10),
       perfil: 'ADMIN',
+      // Senha padrão (do env ou o fallback 'trocar123'): o sistema obriga a troca no primeiro login.
+      trocarSenha: senha === 'trocar123',
     },
   });
 

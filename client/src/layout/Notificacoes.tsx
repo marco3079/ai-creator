@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useEventosTrabalho } from '../lib/eventos';
 import { useDados } from '../lib/useDados';
 import { corStatus, rotuloStatus } from '../lib/tipos-api';
 import type { PainelRecente, PainelResposta } from '../lib/tipos-api';
@@ -42,6 +43,25 @@ export function Notificacoes() {
       window.removeEventListener('focus', aoFocar);
     };
   }, [recarregar]);
+
+  // Qualquer evento de trabalho recarrega o painel, com debounce de 1 s para agrupar rajadas.
+  const debounce = useRef<number | null>(null);
+  useEventosTrabalho(
+    () => true,
+    () => {
+      if (debounce.current !== null) window.clearTimeout(debounce.current);
+      debounce.current = window.setTimeout(() => {
+        debounce.current = null;
+        recarregar();
+      }, 1000);
+    },
+  );
+  useEffect(
+    () => () => {
+      if (debounce.current !== null) window.clearTimeout(debounce.current);
+    },
+    [],
+  );
 
   const recentes: PainelRecente[] = dados?.recentes ?? [];
   const emAndamento = recentes.filter((r) => r.status === 'EXECUTANDO' || r.status === 'FALHA').length;

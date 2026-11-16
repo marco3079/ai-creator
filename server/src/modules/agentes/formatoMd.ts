@@ -29,7 +29,9 @@ export function paraMarkdown(a: Agente): string {
     `description: ${descricao}`,
     `model: ${nomeDoModelo(a.modelo)}`,
   ];
-  if (a.ferramentas.length > 0) linhas.push(`tools: ${a.ferramentas.join(', ')}`);
+  // "aic.*" são ferramentas da plataforma: não existem no Claude Code, então não vão para o .md.
+  const ferramentas = a.ferramentas.filter((f) => !f.startsWith('aic.'));
+  if (ferramentas.length > 0) linhas.push(`tools: ${ferramentas.join(', ')}`);
   linhas.push('---', '', a.promptSistema ?? '');
   return linhas.join('\n') + '\n';
 }
@@ -61,10 +63,11 @@ export function deMarkdown(texto: string): AgenteEntrada {
   const modeloNome = nomeDoModelo(cabecalho.model ?? null);
   const modelo = MODELO_POR_NOME[modeloNome] ?? MODELO_POR_NOME.opus;
 
+  // Ferramentas "aic.*" nunca vêm do .md: quem as mantém é a importação (ver agentes/routes.ts).
   const ferramentas = (cabecalho.tools ?? '')
     .split(',')
     .map((f) => f.trim())
-    .filter(Boolean);
+    .filter((f) => Boolean(f) && !f.startsWith('aic.'));
 
   return {
     nome,

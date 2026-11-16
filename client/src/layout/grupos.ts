@@ -11,10 +11,10 @@ export const GRUPOS: GrupoMenu[] = [
   { titulo: '', icones: ['inicio'] },
   { titulo: 'Agentes', icones: ['robo', 'cerebro'] },
   { titulo: 'Modelos', icones: ['laboratorio'] },
-  { titulo: 'Firmware', icones: ['pasta', 'martelo', 'chip'] },
-  { titulo: 'Dados', icones: ['dados'] },
+  { titulo: 'Firmware', icones: ['pasta', 'martelo', 'chip', 'terminal'] },
+  { titulo: 'Dados', icones: ['dados', 'upload'] },
   { titulo: 'Integrações', icones: ['plugin'] },
-  { titulo: 'Sistema', icones: ['usuarios', 'log', 'engrenagem'] },
+  { titulo: 'Sistema', icones: ['usuarios', 'log', 'engrenagem', 'grafico'] },
   { titulo: 'Conta', icones: ['chave'] },
 ];
 

@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { config } from '../../lib/config';
 import { caminhoDados } from '../../lib/arquivos';
+import { emitirEvento } from '../../lib/eventos';
 
 // Ajuste fino (fine-tuning) de modelos LLM_NUVEM na API da OpenAI. Ver CONTRATOS-MODELOS §4.
 
@@ -131,11 +132,18 @@ async function registrar(
   texto: string,
   dados: Prisma.TreinoModeloUpdateManyMutationInput = {}
 ): Promise<void> {
-  const atual = await prisma.treinoModelo.findUnique({ where: { id: treinoId }, select: { log: true } });
-  await prisma.treinoModelo.updateMany({
+  const atual = await prisma.treinoModelo.findUnique({
+    where: { id: treinoId },
+    select: { log: true, status: true, modeloId: true },
+  });
+  const gravados = await prisma.treinoModelo.updateMany({
     where: { id: treinoId, status: { not: 'CANCELADO' } },
     data: { ...dados, log: (atual?.log ?? '') + texto },
   });
+  if (gravados.count > 0 && atual) {
+    const status = (dados.status as typeof atual.status | undefined) ?? atual.status;
+    emitirEvento({ tipo: 'treinoModelo', id: treinoId, status, modeloId: atual.modeloId });
+  }
 }
 
 // Envia o dataset e cria o job. Em caso de erro, o treino vira FALHA com a mensagem.
@@ -268,6 +276,7 @@ export function processarEventos(
 // Atualiza um treino em execução com o estado do job na OpenAI.
 async function sincronizarUm(treino: {
   id: number;
+  modeloId: number;
   externoId: string | null;
   log: string;
   metricas: Prisma.JsonValue;
@@ -303,7 +312,7 @@ async function sincronizarUm(treino: {
 
   // updateMany com status != CANCELADO: não sobrescreve um cancelamento feito pelo m02.
   const atual = await prisma.treinoModelo.findUnique({ where: { id: treino.id }, select: { log: true } });
-  await prisma.treinoModelo.updateMany({
+  const gravados = await prisma.treinoModelo.updateMany({
     where: { id: treino.id, status: { not: 'CANCELADO' } },
     data: {
       ...dados,
@@ -311,6 +320,10 @@ async function sincronizarUm(treino: {
       log: (atual?.log ?? '') + texto,
     },
   });
+  if (gravados.count > 0) {
+    const status = (dados.status as 'SUCESSO' | 'FALHA' | 'CANCELADO' | undefined) ?? 'EXECUTANDO';
+    emitirEvento({ tipo: 'treinoModelo', id: treino.id, status, modeloId: treino.modeloId });
+  }
 }
 
 // Percorre os treinos de LLM_NUVEM em execução; um erro num não impede os outros.

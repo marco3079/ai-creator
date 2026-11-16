@@ -28,6 +28,7 @@ const TIPOS: { valor: string; rotulo: string }[] = [
   { valor: 'AUDIO', rotulo: 'Áudio' },
   { valor: 'TABELA', rotulo: 'Tabela de atributos' },
   { valor: 'IMAGENS', rotulo: 'Imagens (classificação)' },
+  { valor: 'SONS', rotulo: 'Sons (palavra-chave)' },
   { valor: 'CONVERSAS', rotulo: 'Conversas (ajuste de LLM)' },
 ];
 
@@ -40,6 +41,11 @@ const FORMATO_ARQUIVO: Record<string, { extensao: string; ajuda: string }> = {
     ajuda:
       'Um .zip com uma pasta por classe, por exemplo classe_a/foto1.jpg e classe_b/foto2.jpg. Pelo menos 2 classes e 2 imagens por classe. Formatos: jpg, png, bmp e gif.',
   },
+  SONS: {
+    extensao: '.zip',
+    ajuda:
+      'Um .zip com uma pasta por palavra, por exemplo grave/a1.wav e agudo/a2.wav. Arquivos .wav de 1 s (PCM de 16 bits, mono ou estéreo; qualquer taxa de amostragem). Pelo menos 2 classes e 2 arquivos por classe.',
+  },
   CONVERSAS: {
     extensao: '.jsonl',
     ajuda:
@@ -48,6 +54,7 @@ const FORMATO_ARQUIVO: Record<string, { extensao: string; ajuda: string }> = {
 };
 
 const EXTENSAO_IMAGEM = /\.(jpe?g|png|bmp|gif)$/i;
+const EXTENSAO_SOM = /\.wav$/i;
 
 const ROTULO_PAPEL: Record<string, string> = { system: 'Sistema', user: 'Usuário', assistant: 'Assistente' };
 
@@ -60,8 +67,8 @@ function lerPrevia(csv: string): string[][] {
     .map((l) => l.split(',').map((c) => c.trim()));
 }
 
-// Conta as imagens de um .zip lendo só o diretório central (sem descomprimir). Só para a prévia.
-function contarImagensZip(bytes: ArrayBuffer): number {
+// Conta os arquivos de um .zip (imagens ou .wav, conforme `extensao`) lendo só o diretório central (sem descomprimir). Só para a prévia.
+function contarArquivosZip(bytes: ArrayBuffer, extensao: RegExp): number {
   const visao = new DataView(bytes);
   const decodificador = new TextDecoder();
   let fim = -1;
@@ -82,7 +89,7 @@ function contarImagensZip(bytes: ArrayBuffer): number {
     const tamComentario = visao.getUint16(posicao + 32, true);
     const nome = decodificador.decode(new Uint8Array(bytes, posicao + 46, tamNome));
     const oculto = nome.includes('__MACOSX') || nome.split('/').some((p) => p.startsWith('.'));
-    if (EXTENSAO_IMAGEM.test(nome) && !oculto) imagens++;
+    if (extensao.test(nome) && !oculto) imagens++;
     posicao += 46 + tamNome + tamExtra + tamComentario;
   }
   return imagens;
@@ -134,8 +141,11 @@ function FormNovoDataset({ aoConcluir }: { aoConcluir: () => void }) {
     if (!nome.trim()) setNome(escolhido.name.replace(/\.(zip|jsonl)$/i, ''));
     try {
       if (tipo === 'IMAGENS') {
-        const imagens = contarImagensZip(await escolhido.arrayBuffer());
+        const imagens = contarArquivosZip(await escolhido.arrayBuffer(), EXTENSAO_IMAGEM);
         setPreviaArquivo(`${imagens} imagens encontradas`);
+      } else if (tipo === 'SONS') {
+        const sons = contarArquivosZip(await escolhido.arrayBuffer(), EXTENSAO_SOM);
+        setPreviaArquivo(`${sons} arquivos .wav encontrados`);
       } else {
         const linhas = (await escolhido.text()).split(/\r?\n/).filter((l) => l.trim().length > 0).length;
         setPreviaArquivo(`${linhas} linhas (conversas)`);
@@ -151,7 +161,7 @@ function FormNovoDataset({ aoConcluir }: { aoConcluir: () => void }) {
 
   async function enviarArquivo() {
     if (!arquivo) {
-      setErro(tipo === 'IMAGENS' ? 'Escolha um arquivo .zip.' : 'Escolha um arquivo .jsonl.');
+      setErro(tipo === 'CONVERSAS' ? 'Escolha um arquivo .jsonl.' : 'Escolha um arquivo .zip.');
       return;
     }
     setOcupado(true);
@@ -353,6 +363,69 @@ function Miniatura({ datasetId, caminho }: { datasetId: number; caminho: string 
   );
 }
 
+// Reprodutor de um .wav do dataset SONS; o áudio é carregado com o token e a URL de blob é revogada ao sair da tela.
+function ReprodutorAudio({ datasetId, caminho }: { datasetId: number; caminho: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [falha, setFalha] = useState(false);
+
+  useEffect(() => {
+    let cancelado = false;
+    let urlCriada: string | null = null;
+    const token = localStorage.getItem(CHAVE_TOKEN);
+    fetch(`/api/datasets/${datasetId}/audio?caminho=${encodeURIComponent(caminho)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('áudio indisponível');
+        return r.blob();
+      })
+      .then((blob) => {
+        if (cancelado) return;
+        urlCriada = URL.createObjectURL(blob);
+        setUrl(urlCriada);
+      })
+      .catch(() => {
+        if (!cancelado) setFalha(true);
+      });
+    return () => {
+      cancelado = true;
+      if (urlCriada) URL.revokeObjectURL(urlCriada);
+    };
+  }, [datasetId, caminho]);
+
+  if (falha) return <span className="tinyml-ajuda">indisponível</span>;
+  if (!url) return <span className="tinyml-ajuda">carregando…</span>;
+  return <audio className="tinyml-audio" controls preload="none" src={url} aria-label={caminho} />;
+}
+
+function AmostraSons({
+  datasetId,
+  classes,
+}: {
+  datasetId: number;
+  classes: { nome: string; quantidade: number; exemplos: string[] }[];
+}) {
+  return (
+    <div className="tinyml-classes">
+      {classes.map((c) => (
+        <section key={c.nome} className="tinyml-classe">
+          <h3 className="tinyml-subtitulo">
+            {c.nome} <span className="tinyml-ajuda">· {c.quantidade} arquivos</span>
+          </h3>
+          <div className="tinyml-sons">
+            {c.exemplos.map((caminho) => (
+              <div key={caminho} className="tinyml-som">
+                <span className="tinyml-ajuda">{caminho.split('/').pop() ?? caminho}</span>
+                <ReprodutorAudio datasetId={datasetId} caminho={caminho} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function AmostraImagens({
   datasetId,
   classes,
@@ -429,6 +502,7 @@ function AmostraDatasetModal({ dataset, aoFechar }: { dataset: Dataset; aoFechar
       {amostra.erro && <Aviso tipo="erro">{amostra.erro}</Aviso>}
       {amostra.carregando && !dados && <Carregando />}
       {dados?.formato === 'IMAGENS' && <AmostraImagens datasetId={dataset.id} classes={dados.classes} />}
+      {dados?.formato === 'SONS' && <AmostraSons datasetId={dataset.id} classes={dados.classes} />}
       {dados?.formato === 'CONVERSAS' && <AmostraConversas conversas={dados.conversas} />}
       {dados?.formato === 'TABELA' && <AmostraTabela cabecalho={dados.cabecalho} linhas={dados.linhas} />}
     </Modal>
@@ -506,7 +580,7 @@ export function Datasets() {
           <Botao variante="texto" aoClicar={() => setAmostraDe(d)}>
             Ver amostra
           </Botao>
-          {d.tipo !== 'IMAGENS' && (
+          {d.tipo !== 'IMAGENS' && d.tipo !== 'SONS' && (
             <Botao variante="texto" aoClicar={() => baixar(d)}>
               {d.tipo === 'CONVERSAS' ? 'Baixar JSONL' : 'Baixar CSV'}
             </Botao>
@@ -525,8 +599,9 @@ export function Datasets() {
         <p className="tinyml-ajuda">
           A primeira linha é o cabeçalho <code>rotulo,f0,f1,...,fN</code>. Cada linha seguinte traz o rótulo
           (nome da classe) e N valores numéricos. Para série temporal, a janela vem achatada por amostra, na
-          ordem <code>ax0,ay0,az0,ax1,...</code>. Para imagens envie um .zip com uma pasta por classe; para
-          conversas (LLM), um .jsonl com uma conversa por linha.
+          ordem <code>ax0,ay0,az0,ax1,...</code>. Para imagens envie um .zip com uma pasta por classe; para sons
+          (palavra-chave), um .zip com uma pasta por palavra e arquivos .wav de 1 s; para conversas (LLM), um
+          .jsonl com uma conversa por linha.
         </p>
       </Cartao>
 

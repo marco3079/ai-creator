@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useDados } from '../../lib/useDados';
 import type { Provedor } from '../../lib/tipos-api';
-import { Campo, Selecao, Selo } from '../../ui';
+import { FERRAMENTAS_PLATAFORMA } from '../../lib/tipos-melhorias';
+import { Campo, Icone, Selecao, Selo } from '../../ui';
+import type { NomeIcone } from '../../ui';
 
 // Campos de configuração de um agente LLM (formato do formulário, não do contrato da API).
 export interface CamposLlm {
@@ -26,6 +28,22 @@ export const FERRAMENTAS_PADRAO = [
   'WebSearch',
   'Agent',
 ];
+
+// Ícone de cada ferramenta da plataforma (usado no formulário e nos cartões do Playground).
+export function iconeDaPlataforma(nome: string): NomeIcone {
+  switch (nome) {
+    case 'aic.listar_arquivos':
+      return 'pasta';
+    case 'aic.ler_arquivo':
+      return 'documento';
+    case 'aic.escrever_arquivo':
+      return 'lapis';
+    case 'aic.compilar':
+      return 'martelo';
+    default:
+      return 'codigo';
+  }
+}
 
 const PROVEDORES: { valor: Provedor; rotulo: string }[] = [
   { valor: 'ANTHROPIC', rotulo: 'Anthropic (Claude)' },
@@ -52,9 +70,12 @@ interface StatusProvedores {
 export function FormularioLlm({
   valor,
   aoMudar,
+  temProjeto = true,
 }: {
   valor: CamposLlm;
   aoMudar: (v: CamposLlm) => void;
+  // Sem projeto vinculado, as ferramentas da plataforma ficam desabilitadas (o servidor também as ignora).
+  temProjeto?: boolean;
 }) {
   const modelos = useDados<ModelosDisponiveis>('/llm/modelos');
   const status = useDados<StatusProvedores>('/llm/status');
@@ -108,7 +129,10 @@ export function FormularioLlm({
     aoMudar({ ...valor, ferramentas: [...valor.ferramentas, nome] });
   }
 
-  const ferramentasExtras = valor.ferramentas.filter((f) => !FERRAMENTAS_PADRAO.includes(f));
+  // "aic.*" são da plataforma e têm seção própria; aqui ficam só as do Claude Code.
+  const ferramentasExtras = valor.ferramentas.filter(
+    (f) => !f.startsWith('aic.') && !FERRAMENTAS_PADRAO.includes(f),
+  );
 
   return (
     <div className="agentes-formulario-llm">
@@ -241,6 +265,33 @@ export function FormularioLlm({
           <button type="button" className="botao botao-secundario" onClick={adicionarFerramenta}>
             Adicionar
           </button>
+        </div>
+      </fieldset>
+
+      <fieldset className="agentes-ferramentas agentes-ferramentas-plataforma" disabled={!temProjeto}>
+        <legend className="campo-rotulo">Ferramentas da plataforma</legend>
+        {!temProjeto && (
+          <p className="agentes-ajuda">
+            Vincule um projeto ao agente para usar estas ferramentas. Sem projeto, elas não são oferecidas ao modelo.
+          </p>
+        )}
+        <div className="agentes-chips">
+          {FERRAMENTAS_PLATAFORMA.map((f) => {
+            const ativa = valor.ferramentas.includes(f.nome);
+            return (
+              <button
+                key={f.nome}
+                type="button"
+                className={ativa ? 'agentes-chip agentes-chip-ativo' : 'agentes-chip'}
+                aria-pressed={ativa}
+                title={f.nome}
+                onClick={() => alternarFerramenta(f.nome)}
+              >
+                <Icone nome={iconeDaPlataforma(f.nome)} tamanho={14} />
+                {f.rotulo}
+              </button>
+            );
+          })}
         </div>
       </fieldset>
     </div>

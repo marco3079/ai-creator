@@ -1,0 +1,95 @@
+/* Tela "Uso e custos". Cores só por variáveis do tema. */
+
+.uso-periodo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.uso-cartoes {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 16px;
+}
+
+.uso-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 14px 16px;
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra);
+}
+
+.uso-cartao-rotulo {
+  color: var(--cor-texto-suave);
+  font-size: 0.85rem;
+}
+
+.uso-cartao-valor {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.uso-grafico {
+  width: 100%;
+  min-height: 240px;
+}
+
+.uso-modelo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.uso-ajuda {
+  color: var(--cor-texto-suave);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.uso-precos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.uso-preco-linha {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(110px, 1fr));
+  align-items: end;
+}
+
+.uso-preco-modelo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.uso-preco-novo {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  border-top: 1px dashed var(--cor-borda);
+  padding-top: 12px;
+}
+
+.uso-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .uso-preco-linha,
+  .uso-preco-novo {
+    grid-template-columns: 1fr;
+  }
+}
