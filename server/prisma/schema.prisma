@@ -51,17 +51,17 @@ enum Placa {
 }
 
 model Usuario {
-  id        Int        @id @default(autoincrement())
-  nome      String
-  email     String     @unique
-  senhaHash String
-  perfil    Perfil     @default(DEV)
-  ativo     Boolean    @default(true)
-  trocarSenha Boolean  @default(false) // obriga trocar a senha no próximo login (senha padrão/temporária)
-  criadoEm  DateTime   @default(now())
-  tokens    TokenApi[]
-  agentes   Agente[]   @relation("AutorAgente")
-  logs      Log[]
+  id          Int        @id @default(autoincrement())
+  nome        String
+  email       String     @unique
+  senhaHash   String
+  perfil      Perfil     @default(DEV)
+  ativo       Boolean    @default(true)
+  trocarSenha Boolean    @default(false) // obriga trocar a senha no próximo login (senha padrão/temporária)
+  criadoEm    DateTime   @default(now())
+  tokens      TokenApi[]
+  agentes     Agente[]   @relation("AutorAgente")
+  logs        Log[]
 }
 
 // Token pessoal para o plugin do VS Code e o MCP do Claude Code. Guardado só o hash (sha256).
@@ -89,6 +89,23 @@ model Projeto {
   arquivos     ArquivoProjeto[]
   agentes      Agente[]
   builds       Build[]
+  versoes      VersaoProjeto[]
+}
+
+// Histórico do projeto: cada versão é uma foto de todos os arquivos (como um commit).
+model VersaoProjeto {
+  id        Int      @id @default(autoincrement())
+  projetoId Int
+  projeto   Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  numero    Int // 1, 2, 3... dentro do projeto
+  mensagem  String
+  arquivos  Json // { caminho: string, conteudo: string }[]
+  autorId   Int?
+  buildId   Int? // versão criada automaticamente ao compilar
+  hash      String // sha256 do conteúdo (para não repetir versões idênticas)
+  criadoEm  DateTime @default(now())
+
+  @@unique([projetoId, numero])
 }
 
 model ArquivoProjeto {
@@ -155,16 +172,16 @@ model Conversa {
 }
 
 model Dataset {
-  id             Int      @id @default(autoincrement())
+  id             Int            @id @default(autoincrement())
   nome           String
-  descricao      String   @default("")
+  descricao      String         @default("")
   tipo           String // SERIE_TEMPORAL | AUDIO | TABELA | IMAGENS | CONVERSAS | SONS
-  classes        String[] @default([])
-  janela         Int      @default(0)
+  classes        String[]       @default([])
+  janela         Int            @default(0)
   caminhoArquivo String // relativo a DATA_DIR: "datasets/3.csv", "datasets/4/" (IMAGENS) ou "datasets/5.jsonl" (CONVERSAS)
-  amostras       Int      @default(0)
-  colunas        Int      @default(0) // nº de colunas de atributos (sem o rótulo)
-  criadoEm       DateTime @default(now())
+  amostras       Int            @default(0)
+  colunas        Int            @default(0) // nº de colunas de atributos (sem o rótulo)
+  criadoEm       DateTime       @default(now())
   treinos        Treino[]
   modelos        Modelo[]
   treinosModelo  TreinoModelo[]
@@ -191,41 +208,41 @@ model Treino {
 }
 
 model Build {
-  id           Int       @id @default(autoincrement())
-  projetoId    Int
-  projeto      Projeto   @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-  placa        Placa
-  agenteId     Int? // agente TinyML cujo modelo foi embutido (include/model_data.h)
+  id             Int       @id @default(autoincrement())
+  projetoId      Int
+  projeto        Projeto   @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  placa          Placa
+  agenteId       Int? // agente TinyML cujo modelo foi embutido (include/model_data.h)
   modeloTreinoId Int? // treino da área Modelos cujos artefatos C foram embutidos em include/
-  status       StatusJob @default(FILA)
-  log          String    @default("") @db.Text
-  artefato     String? // relativo a DATA_DIR (ex.: "builds/12/firmware.bin")
-  offset       String? // endereço de gravação (ex.: "0x0" para ESP32 merged)
-  artefatoOta  String? // só ESP32/S3: firmware da aplicação (sem bootloader) para OTA, relativo a DATA_DIR
-  tamanhoBytes Int?
-  tentativas   Int       @default(0)
-  criadoEm     DateTime  @default(now())
-  atualizadoEm DateTime  @default(now()) @updatedAt
-  iniciadoEm   DateTime?
-  finalizadoEm DateTime?
+  status         StatusJob @default(FILA)
+  log            String    @default("") @db.Text
+  artefato       String? // relativo a DATA_DIR (ex.: "builds/12/firmware.bin")
+  offset         String? // endereço de gravação (ex.: "0x0" para ESP32 merged)
+  artefatoOta    String? // só ESP32/S3: firmware da aplicação (sem bootloader) para OTA, relativo a DATA_DIR
+  tamanhoBytes   Int?
+  tentativas     Int       @default(0)
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @default(now()) @updatedAt
+  iniciadoEm     DateTime?
+  finalizadoEm   DateTime?
 }
 
 model Dispositivo {
-  id             Int       @id @default(autoincrement())
+  id             Int                     @id @default(autoincrement())
   nome           String
   placa          Placa
-  porta          String    @default("")
-  notas          String    @default("")
+  porta          String                  @default("")
+  notas          String                  @default("")
   ultimoBuildId  Int?
   ultimaGravacao DateTime?
-  criadoEm       DateTime  @default(now())
+  criadoEm       DateTime                @default(now())
   // --- Frota / OTA (leva B) ---
   projetoId      Int? // projeto cujo firmware roda na placa
-  chaveHash      String?   @unique // sha256 da chave do dispositivo ("aicd_..."); a chave em claro só aparece ao gerar
+  chaveHash      String? // sha256 da chave do dispositivo ("aicd_..."); a chave em claro só aparece ao gerar
   chavePrefixo   String? // primeiros 10 caracteres, para mostrar
   buildAtualId   Int? // build que a placa informou estar rodando
   buildAlvoId    Int? // build que deve ser instalado via OTA (null = nada a fazer)
-  online         Boolean   @default(false)
+  online         Boolean                 @default(false)
   ultimoContato  DateTime?
   ip             String?
   telemetria     Json? // última mensagem de telemetria recebida
@@ -264,16 +281,16 @@ model Plataforma {
 
 // Uso de LLM por execução de agente (tokens e custo estimado).
 model UsoLlm {
-  id        Int      @id @default(autoincrement())
-  agenteId  Int?
-  usuarioId Int?
-  provedor  String // ANTHROPIC | OPENAI | OLLAMA
-  modelo    String
-  entrada   Int
-  saida     Int
-  custoUsd  Float? // null quando não há preço cadastrado para o modelo
-  ferramentas Int    @default(0) // chamadas de ferramenta na execução
-  criadoEm  DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  agenteId    Int?
+  usuarioId   Int?
+  provedor    String // ANTHROPIC | OPENAI | OLLAMA
+  modelo      String
+  entrada     Int
+  saida       Int
+  custoUsd    Float? // null quando não há preço cadastrado para o modelo
+  ferramentas Int      @default(0) // chamadas de ferramenta na execução
+  criadoEm    DateTime @default(now())
 
   @@index([criadoEm])
   @@index([agenteId])

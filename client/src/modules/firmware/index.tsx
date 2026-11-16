@@ -6,6 +6,9 @@ const Projetos = lazy(() => import('./Projetos').then((m) => ({ default: m.Proje
 const EditorProjeto = lazy(() => import('./EditorProjeto').then((m) => ({ default: m.EditorProjeto })));
 const Compilacoes = lazy(() => import('./Compilacoes').then((m) => ({ default: m.Compilacoes })));
 const Dispositivos = lazy(() => import('./Dispositivos').then((m) => ({ default: m.Dispositivos })));
+const DetalheDispositivo = lazy(() =>
+  import('./DetalheDispositivo').then((m) => ({ default: m.DetalheDispositivo })),
+);
 const MonitorSerialPagina = lazy(() =>
   import('./MonitorSerial').then((m) => ({ default: m.MonitorSerialPagina })),
 );
@@ -40,11 +43,19 @@ export const rotas: RotaModulo[] = [
   },
   {
     caminho: '/app/dispositivos',
-    rotulo: 'Dispositivos',
+    rotulo: 'Frota',
     icone: 'chip',
     perfis: [...TODOS],
     elemento: <Dispositivos />,
     ordem: 22,
+  },
+  {
+    caminho: '/app/dispositivos/:id',
+    rotulo: 'Dispositivo',
+    icone: 'chip',
+    perfis: [...TODOS],
+    elemento: <DetalheDispositivo />,
+    menu: false,
   },
   {
     caminho: '/app/serial',

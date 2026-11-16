@@ -2,7 +2,7 @@
   "name": "ai-creator",
   "displayName": "AI Creator",
   "description": "Gerencie agentes, projetos de firmware e builds do AI Creator direto no VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "marco3079",
   "license": "MIT",
   "engines": {

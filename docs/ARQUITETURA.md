@@ -13,11 +13,15 @@ flowchart TB
     vscode["Extensão VS Code"]
     mcp["Servidor MCP (Claude Code)"]
   end
+  subgraph Placas["Rede local"]
+    placa["ESP32 / ESP32-S3<br/>(firmware OTA)"]
+  end
   subgraph Compose["docker compose"]
     server["server<br/>Express + Prisma (3333)"]
     trainer["trainer<br/>FastAPI + TensorFlow (8001)"]
     builder["builder<br/>FastAPI + PlatformIO (8002)"]
     finetuner["finetuner<br/>FastAPI + PyTorch (8003, perfil gpu)"]
+    mosquitto["mosquitto<br/>MQTT (1883)"]
     db[("db<br/>PostgreSQL 16 (5432)")]
     ollama["ollama<br/>(perfil ollama, 11434)"]
     dados[("volume dados<br/>/data")]
@@ -29,6 +33,9 @@ flowchart TB
   client -->|"/api"| server
   vscode -->|"/api, token aic_"| server
   mcp -->|"/api, token aic_"| server
+  placa -->|"/api/ota, chave do dispositivo"| server
+  placa <-->|"MQTT: telemetria, status, comando"| mosquitto
+  server <-->|"MQTT"| mosquitto
   server --> db
   server -->|"POST /treinos e /modelos/treinos"| trainer
   server -->|"POST /builds, /gravar"| builder
@@ -56,8 +63,9 @@ flowchart TB
 | `builder` | `builder/` | Python 3.11, FastAPI, PlatformIO | 8002 | não |
 | `finetuner` | `finetuner/` | Python 3.11, FastAPI, PyTorch CUDA, Transformers, PEFT, TRL | 8003 | não (perfil `gpu`, exige GPU NVIDIA) |
 | `ollama` | (imagem `ollama/ollama`) | Ollama | 11434 | não (perfil `ollama`) |
+| `mosquitto` | `eclipse-mosquitto:2.0.20` | Broker MQTT da frota | 1883 | sim, `MQTT_PORTA` (1883), para as placas da rede local |
 
-Só o `client` é publicado. O `server` conversa com a extensão, com o MCP e com o navegador pelo `client`, que encaminha `/api`. Os serviços internos não têm porta publicada.
+O `client` é publicado para o navegador, e o `mosquitto` para as placas da rede local. O `server` conversa com a extensão, com o MCP e com o navegador pelo `client`, que encaminha `/api`. Os demais serviços internos não têm porta publicada.
 
 ## Volumes
 
@@ -68,6 +76,7 @@ Só o `client` é publicado. O `server` conversa com a extensão, com o MCP e co
 | `platformio` | `/root/.platformio` | builder | Plataformas e bibliotecas do PlatformIO, para não baixar a cada compilação |
 | `ollama` | `/root/.ollama` | ollama | Modelos locais |
 | `hf` | `/root/.cache/huggingface` | finetuner | Modelos base baixados do Hugging Face, para não baixar a cada treino |
+| `mosquitto` | `/mosquitto/data` | mosquitto | Dados do broker, como as mensagens retidas do status das placas |
 
 Dentro do volume `dados` (`/data`):
 
@@ -95,7 +104,8 @@ sequenceDiagram
   participant T as trainer
   U->>C: Treinar o agente com um dataset
   C->>S: POST /api/agentes/:id/treinar
-  S->>S: Cria o Treino (FILA)
+  S->>S: Cria o Treino (FILA) e acorda a fila
+  Note over S: O despachante envia quando há vaga no trainer
   S->>T: POST /treinos (csv, config, callbackUrl, callbackToken)
   T-->>S: 202 Accepted
   S->>S: Treino passa para EXECUTANDO
@@ -123,6 +133,8 @@ sequenceDiagram
   C->>S: POST /api/projetos/:id/build { agenteId? }
   S->>S: Escreve os arquivos em /data/projetos/<slug>/
   S->>S: Se houver agente com treino, copia model_data.h para include/
+  S->>S: Grava include/aic_versao.h com o id do build e cria o Build (FILA)
+  Note over S: O despachante envia quando há vaga no builder
   S->>B: POST /builds (buildId, projetoDir, placa, saidaDir, callback)
   B-->>S: 202 Accepted
   S->>S: Build passa para EXECUTANDO
@@ -214,6 +226,69 @@ sequenceDiagram
 
 Se o Ollama não responder, o treino termina em SUCESSO com um aviso no log e sem `modeloResultante`. Assim o adaptador continua disponível para baixar.
 
+## Fila de trabalhos e vigia
+
+Treinos e compilações não são enviados no momento do clique. Cada pedido vira uma linha em `FILA` no PostgreSQL, e o despachante do `server` envia o trabalho quando o serviço tem vaga. Assim, um pedido não se perde se o `server` reiniciar.
+
+Estados: `FILA` → `EXECUTANDO` → `SUCESSO`, `FALHA` ou `CANCELADO`.
+
+**Despachante** (`server/src/modules/fila/despachante.ts`)
+
+- Roda a cada 3 segundos e também logo que um pedido chega (`acordarFila`), sem sobrepor dois ciclos.
+- Vagas por serviço: `trainer` (variável `FILA_TRAINER`, padrão 1), `builder` (`FILA_BUILDER`, padrão 2), `finetuner` (`FILA_FINETUNER`, padrão 1) e OpenAI (5, fixo).
+- Cada trabalho passa de `FILA` para `EXECUTANDO` com uma atualização que só vale se ele ainda estiver em `FILA`. Assim dois ciclos não pegam o mesmo trabalho.
+- Serviço fora do ar (falha de conexão, timeout ou erro 5xx): o trabalho volta para `FILA` com uma tentativa a mais e só é reenviado 15 segundos depois. Ao chegar a 20 tentativas, vira `FALHA`. Erro 4xx do serviço vira `FALHA` na hora, com o corpo da resposta no log.
+
+**Vigia** (`server/src/modules/fila/vigia.ts`)
+
+- Roda 10 segundos depois de subir e depois a cada 60 segundos.
+- Pergunta a cada serviço quais trabalhos ainda executam (`GET /trabalhos`). Um trabalho `EXECUTANDO` que não aparece lá, há mais de 2 minutos, é marcado como `FALHA`, porque o serviço reiniciou e o trabalho se perdeu.
+- Tempo limite, contado desde o início: build 30 minutos, treino no `trainer` 2 horas e ajuste fino local 12 horas. Os jobs de LLM na nuvem são acompanhados pelo worker da OpenAI.
+- Em testes, `FILA_DESLIGADA=1` desliga o despachante e a vigia.
+
+`GET /api/fila` mostra, por serviço, a capacidade, quantos executam, quantos esperam e se o serviço responde.
+
+## Eventos ao vivo
+
+Toda mudança de status ou de log de um trabalho vira um evento (`emitirEvento` em `server/src/lib/eventos.ts`). As telas recebem esses eventos por SSE em `GET /api/eventos`.
+
+- Cada evento de trabalho é um JSON `EventoTrabalho`, com `tipo` (`treino`, `treinoModelo` ou `build`), `id`, `status`, `em` e o id do agente, do modelo ou do projeto. Um `: ping` sai a cada 25 segundos para a conexão não cair no proxy.
+- Os eventos da frota têm `tipo: 'dispositivo'` e o corpo `{ tipo, id, online, statusOta, em }`, sem `status`.
+- No cliente, há **uma** conexão compartilhada (`client/src/lib/eventos.ts`). Ela só fica aberta enquanto alguma tela está assinando, e reconecta com espera de 1, 2, 5 e 10 segundos. As telas recarregam os dados quando chega um evento que interessa, e mantêm um polling de segurança a cada 20 segundos.
+
+## Frota e OTA
+
+Placas ESP32 e ESP32-S3 com o modelo de projeto OTA conversam com o servidor de dois jeitos:
+
+- **MQTT** (broker `mosquitto`, `allow_anonymous false`, com usuário e senha): tópicos `aic/d/<dispositivoId>/` com `telemetria` (da placa para o servidor), `status` (retido: `online`, ou `offline` pelo Last Will) e `comando` (do servidor para a placa, `atualizar` ou `reiniciar`).
+- **HTTP** em `/api/ota/*`, com os cabeçalhos `X-Dispositivo-Id` e `X-Dispositivo-Chave` (sem JWT): a placa consulta se há build novo, baixa o binário e informa o resultado.
+
+O servidor (`server/src/modules/frota/mqtt.ts`) usa o cliente `mqtt` e a variável `MQTT_URL` (padrão `mqtt://mosquitto:1883`). Sem broker, o servidor segue funcionando e só registra o problema no log. Ao receber telemetria, ele marca a placa como online, grava o último contato, a telemetria e a versão em execução, e guarda uma amostra no máximo a cada 30 segundos (amostras com mais de 7 dias são apagadas todo dia). Sem contato por 60 segundos, a placa vira offline. Cada mudança de online, telemetria ou status da OTA emite um evento `dispositivo`, e a tela da frota atualiza ao vivo.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuário
+  participant C as client
+  participant S as server
+  participant M as mosquitto
+  participant P as placa (OTA)
+  U->>C: Atualizar agora
+  C->>S: POST /api/dispositivos/:id/comando { acao: "atualizar" }
+  S->>M: publica aic/d/<id>/comando
+  M->>P: { "acao": "atualizar" }
+  P->>S: GET /api/ota/verificar?versao=<atual>
+  S-->>P: { atualizar: true, buildId, url, tamanho, md5 }
+  P->>S: GET /api/ota/firmware/<buildId>
+  S-->>P: binário da aplicação (firmware-ota.bin)
+  Note over P: Grava o binário e reinicia com a nova versão
+  P->>S: POST /api/ota/resultado { buildId, ok, mensagem }
+  P->>M: telemetria (versao = novo buildId)
+  M->>S: telemetria, que grava versão e último contato
+```
+
+Os binários entram pela mesma fila de compilação. O build de uma placa OTA gera também o `firmware-ota.bin`, e só esse arquivo vai para a placa. O alvo de cada placa é definido na tela da frota, e só builds SUCESSO da mesma placa podem ser alvo.
+
 ## Autenticação
 
 Há dois tipos de credencial, aceitos no mesmo cabeçalho `Authorization: Bearer`:
@@ -223,7 +298,11 @@ Há dois tipos de credencial, aceitos no mesmo cabeçalho `Authorization: Bearer
 
 O perfil (`ADMIN`, `DEV` ou `LEITOR`) define quais rotas a credencial pode usar. As rotas `/api/interno/*` usam outro segredo, `INTERNO_TOKEN`, enviado no cabeçalho `X-Interno-Token`.
 
-Senhas são guardadas com bcrypt.
+Uma placa da frota não usa login: as rotas `/api/ota/*` pedem `X-Dispositivo-Id` e `X-Dispositivo-Chave`. A chave tem o formato `aicd_<40 hex>`, e o servidor guarda só o hash SHA-256.
+
+Senhas são guardadas com bcrypt. Quando o usuário precisa trocar a senha (a senha padrão do administrador, ou uma senha redefinida por outro administrador), o login e `GET /api/auth/eu` devolvem `trocarSenha: true`, e a tela só libera as outras páginas depois da troca (`POST /api/auth/trocar-senha`).
+
+Os segredos `JWT_SECRET` e `INTERNO_TOKEN`, quando ficam com o valor de exemplo, são gerados pelo servidor e gravados em `DATA_DIR/segredos.json`, com permissão restrita. Veja [SECURITY.md](../SECURITY.md).
 
 ## Convenção de módulos
 
@@ -232,7 +311,7 @@ Senhas são guardadas com bcrypt.
 - Cada módulo fica em `server/src/modules/<modulo>/routes.ts` e exporta `export default router` (um `express.Router()`).
 - As rotas são declaradas com o caminho completo, sem `/api` (por exemplo, `router.get('/agentes', ...)`).
 - Na inicialização, `app.ts` lê a pasta `src/modules` e monta cada `router` em `/api`. Para criar um módulo, basta criar a pasta com o `routes.ts`.
-- Código comum fica em `server/src/lib/`: `prisma.ts`, `config.ts`, `erros.ts` (classe `ErroHttp` e o wrapper `rota`), `auth.ts` (autenticação e perfis), `log.ts` (registro de atividades), `slug.ts` e `arquivos.ts`.
+- Código comum fica em `server/src/lib/`: `prisma.ts`, `config.ts`, `erros.ts` (classe `ErroHttp` e o wrapper `rota`), `auth.ts` (autenticação e perfis), `log.ts` (registro de atividades), `slug.ts`, `arquivos.ts`, `eventos.ts` (eventos ao vivo) e `segredos.ts` (segredos persistentes).
 - Validação de entrada com zod. Erros são convertidos pelo tratador de `app.ts`: `ErroHttp` vira o status informado, erro de validação vira `400` com a primeira mensagem, e o resto vira `500 "Erro interno"`.
 
 ### Cliente
@@ -255,5 +334,6 @@ Cada alteração de agente gera uma linha em `VersaoAgente` com o snapshot compl
 - **OpenAI**: chave `OPENAI_API_KEY`.
 - **Ollama**: `OLLAMA_URL` (padrão `http://ollama:11434`). Os modelos são listados em `/api/tags`.
 - **PlatformIO**: dentro do `builder`, com o registro de plataformas no volume `platformio`.
+- **MQTT**: broker `mosquitto`, com `MQTT_URL` no servidor e usuário e senha (`MQTT_USUARIO` e `MQTT_SENHA`). Usado pela frota (veja [Frota e OTA](#frota-e-ota)).
 
 Se um provedor não tiver chave ou não responder, a API devolve erro em português e a interface mostra o aviso, sem derrubar o restante do sistema.

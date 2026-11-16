@@ -12,6 +12,7 @@ import { ArvoreArquivos } from './ArvoreArquivos';
 import { EditorCodigo } from './EditorCodigo';
 import { Gravador } from './Gravador';
 import { MonitorSerial } from './MonitorSerial';
+import { HistoricoProjeto } from './HistoricoProjeto';
 import './firmware.css';
 
 // Polling de segurança enquanto a compilação está em andamento (os eventos ao vivo fazem o resto).
@@ -55,6 +56,8 @@ export function EditorProjeto() {
   const [erroBuild, setErroBuild] = useState<string | null>(null);
   // Monitor serial: só monta (e abre a porta) quando a seção está aberta.
   const [monitorAberto, setMonitorAberto] = useState(false);
+  // Histórico do projeto (versões, diff, restaurar, Git).
+  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   const { dados: agentes } = useDados<AgenteResumo[]>('/agentes?tipo=TINYML');
   const { dados: agenteEscolhido } = useDados<Agente>(agenteId ? `/agentes/${agenteId}` : null);
@@ -143,6 +146,29 @@ export function EditorProjeto() {
     // atualizarBuildAtual depende só de buildId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildEmAndamento, buildId]);
+
+  // Depois de restaurar uma versão: recarrega o projeto e o arquivo aberto do servidor.
+  // O buffer do editor é descartado (conteúdo novo do servidor), para não salvar conteúdo velho por cima.
+  async function aposRestaurar() {
+    recarregar();
+    const caminho = ativo;
+    if (pid === undefined || caminho === null) return;
+    try {
+      const r = await api.get<{ caminho: string; conteudo: string }>(
+        `/projetos/${pid}/arquivo?caminho=${encodeURIComponent(caminho)}`,
+      );
+      setConteudo(r.conteudo);
+      setOriginal(r.conteudo);
+      setErroArquivo(null);
+    } catch {
+      // Arquivo não existe mais na versão restaurada: fecha o editor sem salvar nada.
+      setAtivo(null);
+      setConteudo('');
+      setOriginal('');
+      setErroArquivo(null);
+      setAviso(`"${caminho}" não existe na versão restaurada e foi fechado.`);
+    }
+  }
 
   async function carregarArquivo(caminho: string) {
     if (pid === undefined) return;
@@ -318,6 +344,9 @@ export function EditorProjeto() {
           {projeto.descricao && <p className="firmware-texto">{projeto.descricao}</p>}
         </div>
         <div className="firmware-projeto-placa">
+          <Botao variante="secundario" aoClicar={() => setHistoricoAberto(true)}>
+            Histórico
+          </Botao>
           <Selo cor="azul">{rotuloPlaca(projeto.placa)}</Selo>
           <Selecao
             rotulo="Trocar placa"
@@ -444,6 +473,16 @@ export function EditorProjeto() {
             </Botao>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        aberto={historicoAberto}
+        titulo="Histórico do projeto"
+        aoFechar={() => setHistoricoAberto(false)}
+      >
+        {pid !== undefined && (
+          <HistoricoProjeto projetoId={pid} aoRestaurar={aposRestaurar} />
+        )}
       </Modal>
     </section>
   );

@@ -73,11 +73,19 @@ echo "Docker OK."
 # 2) Arquivo .env com segredos aleatórios (só cria se não existir)
 if [ -f "$ARQUIVO_ENV" ]; then
   echo "Arquivo .env já existe; será mantido."
+  # Instalação anterior sem o broker MQTT: gera a senha só se estiver vazia
+  if [ -z "$(ler_env MQTT_SENHA)" ]; then
+    gravar_env MQTT_SENHA "$(gerar_segredo)"
+  fi
+  if [ -z "$(ler_env MQTT_USUARIO)" ]; then
+    gravar_env MQTT_USUARIO aic
+  fi
 else
   cp .env.example "$ARQUIVO_ENV"
   gravar_env POSTGRES_PASSWORD "$(gerar_segredo)"
   gravar_env JWT_SECRET "$(gerar_segredo)"
   gravar_env INTERNO_TOKEN "$(gerar_segredo)"
+  gravar_env MQTT_SENHA "$(gerar_segredo)"
   echo "Arquivo .env criado com segredos aleatórios."
 fi
 
@@ -96,6 +104,24 @@ if [ "$PERGUNTAR" = 1 ]; then
     [ -n "${chave_openai:-}" ] && gravar_env OPENAI_API_KEY "$chave_openai"
   fi
   unset chave_anthropic chave_openai 2>/dev/null || true
+
+  # IP da máquina para as placas ESP32 (opcional)
+  if [ -z "$(ler_env MQTT_HOST_PUBLICO)" ]; then
+    printf "IP desta máquina na rede para as placas ESP32, ex. 192.168.0.10 (Enter para pular): "
+    read -r ip_rede || true
+    echo
+    if [ -n "${ip_rede:-}" ]; then
+      case "$ip_rede" in
+        *[!0-9A-Za-z.-]*) echo "IP inválido; pulando. Edite MQTT_HOST_PUBLICO no .env depois." ;;
+        *)
+          porta_web_ip="$(ler_env WEB_PORT)"
+          gravar_env MQTT_HOST_PUBLICO "$ip_rede"
+          gravar_env SERVIDOR_URL_PUBLICA "http://${ip_rede}:${porta_web_ip:-8080}"
+          ;;
+      esac
+    fi
+    unset ip_rede porta_web_ip 2>/dev/null || true
+  fi
 fi
 
 # 4) Subir os contêineres

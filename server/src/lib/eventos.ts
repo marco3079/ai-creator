@@ -15,17 +15,31 @@ export interface EventoTrabalho {
   em: string; // ISO
 }
 
+// Estado de um dispositivo da frota (leva B). id = dispositivo.
+export interface EventoDispositivo {
+  tipo: 'dispositivo';
+  id: number;
+  online: boolean;
+  statusOta: string | null;
+  em?: string; // carimbado por emitirEvento
+}
+
+export type EventoServidor = EventoTrabalho | EventoDispositivo;
+
+// Evento sem o horário (que emitirEvento carimba). Distribui sobre a união.
+type SemEm<T> = T extends unknown ? Omit<T, 'em'> : never;
+
 const barramento = new EventEmitter();
 barramento.setMaxListeners(0);
 
-// Publica uma mudança de status ou de log/métricas de um trabalho. Carimba o horário.
-export function emitirEvento(evento: Omit<EventoTrabalho, 'em'>): void {
-  const completo: EventoTrabalho = { ...evento, em: new Date().toISOString() };
+// Publica uma mudança de status ou de log/métricas de um trabalho (ou de um dispositivo). Carimba o horário.
+export function emitirEvento(evento: SemEm<EventoServidor>): void {
+  const completo = { ...evento, em: new Date().toISOString() } as EventoServidor;
   barramento.emit('evento', completo);
 }
 
 // Assina os eventos. Devolve a função que remove o ouvinte.
-export function ouvirEventos(fn: (evento: EventoTrabalho) => void): () => void {
+export function ouvirEventos(fn: (evento: EventoServidor) => void): () => void {
   barramento.on('evento', fn);
   return () => {
     barramento.off('evento', fn);

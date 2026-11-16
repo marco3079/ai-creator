@@ -12,7 +12,7 @@ export interface EventoTrabalho {
   agenteId?: number | null; // treino (agente TinyML)
   modeloId?: number | null; // treinoModelo
   projetoId?: number | null; // build
-  online?: boolean; // dispositivo (status vem como 'SUCESSO' fixo; use online/statusOta)
+  online?: boolean; // dispositivo: o servidor não envia status nesse tipo — use só tipo/id/online/statusOta
   statusOta?: string | null; // dispositivo
   em: string; // ISO
 }

@@ -27,6 +27,7 @@
 - [Visão geral](#visão-geral)
 - [Recursos](#recursos)
   - [Modelos](#modelos)
+  - [Frota e OTA](#frota-e-ota)
 - [Telas](#telas)
 - [Placas suportadas](#placas-suportadas)
 - [Arquitetura](#arquitetura)
@@ -54,20 +55,33 @@ Quem trabalha no computador pode usar a extensão do VS Code e o servidor MCP co
 
 ## Recursos
 
-- **Agentes LLM**: provedores Claude, OpenAI e Ollama, playground com streaming (SSE), conversas salvas, uso de tokens por resposta.
+- **Agentes LLM**: provedores Claude, OpenAI e Ollama, playground com streaming (SSE), conversas salvas, uso e custo de tokens por agente e por provedor.
+- **Agentes com ferramentas**: um agente LLM vinculado a um projeto lê, edita e compila o firmware pelas ferramentas da plataforma (Claude e OpenAI).
 - **Agentes TinyML**: formulário de configuração, treino em segundo plano, métricas, matriz de confusão e download do `.tflite` e do `model_data.h`.
 - **Datasets e treinos**: importação de CSV com prévia, amostra, download e histórico de treinos.
+- **Fila e tempo real**: treinos e compilações entram numa fila guardada no banco, e uma vigia recupera trabalhos perdidos quando um serviço reinicia. O andamento aparece ao vivo (SSE), sem recarregar a tela.
 - **Firmware**: projetos PlatformIO, editor de arquivos, compilações com log, dispositivos cadastrados, gravação por Web Serial ou pelo servidor.
+- **Histórico do projeto**: versões manuais e automáticas a cada compilação, comparação linha a linha, restaurar uma versão e baixar o histórico como repositório Git.
+- **Monitor serial e coleta**: leia a saída serial da placa no navegador (Web Serial) e grave exemplos rotulados como dataset de série temporal. Sem placa, a coleta funciona com um simulador.
+- **Áudio e palavra-chave**: modelo TinyML que classifica palavras-chave a partir de arquivos `.wav`, com o mesmo cálculo de características na placa.
+- **Frota e OTA**: placas ESP32 e ESP32-S3 com o firmware OTA entram na frota, mandam telemetria por MQTT e atualizam o firmware pelo Wi-Fi.
 - **VS Code**: árvore de agentes e projetos, baixar e enviar, compilar e gravar a placa pelo PlatformIO.
 - **Claude Code e MCP**: ferramentas para listar e editar agentes e arquivos, compilar e treinar, além de comandos de plugin (`/ai-compilar`, `/ai-sincronizar-agentes`, `/ai-treinar`, `/ai-treinar-modelo`).
-- **Usuários e acesso**: perfis ADMIN, DEV e LEITOR, tokens de API para integrações e registro de atividades.
+- **Usuários e acesso**: perfis ADMIN, DEV e LEITOR, troca de senha no primeiro acesso, tokens de API para integrações e registro de atividades.
+- **Segurança**: segredos gerados e guardados no servidor, chave de cada placa (o servidor guarda só o hash) e broker MQTT com usuário e senha.
 - **Visual**: tema claro e escuro, painel com indicadores, uso no celular e instalação como app (PWA).
+
+Para o que ainda precisa de teste com hardware ou chaves de API, veja [O que ainda precisa de teste com hardware ou chaves](TESTAR.md).
 
 ### Modelos
 
-Na área **Modelos** você cria um modelo, treina quantas vezes quiser e publica o treino que vai usar. Há quatro tipos: **TinyML** (rede neural para a placa, exporta TFLite INT8 e `model_data.h`), **tabular** (algoritmos do scikit-learn, exporta C quando o algoritmo permite), **LLM na nuvem** (ajuste fino da OpenAI) e **LLM local** (ajuste fino com LoRA numa GPU NVIDIA, registrado no Ollama). Modelos TinyML e tabulares podem ser embutidos no firmware; modelos LLM viram agentes.
+Na área **Modelos** você cria um modelo, treina quantas vezes quiser e publica o treino que vai usar. Há quatro tipos: **TinyML** (rede neural para a placa, exporta TFLite INT8 e `model_data.h`), **tabular** (algoritmos do scikit-learn, exporta C quando o algoritmo permite), **LLM na nuvem** (ajuste fino da OpenAI) e **LLM local** (ajuste fino com LoRA numa GPU NVIDIA, registrado no Ollama). Modelos TinyML e tabulares podem ser embutidos no firmware; modelos LLM viram agentes. Antes de gravar, a aba **Testar** roda a versão no servidor com o mesmo arquivo que vai para a placa.
 
 Veja o guia completo, com formatos de dataset, exemplos e custos, em [docs/MODELOS.md](docs/MODELOS.md).
+
+### Frota e OTA
+
+Com o modelo de projeto **OTA**, uma placa ESP32 ou ESP32-S3 entra na frota: ela publica telemetria (sinal Wi-Fi, memória, versão do firmware) por MQTT, aparece como online ou offline e recebe a atualização de firmware pelo ar. Você gera a chave da placa, baixa o `aic_config.h`, grava a primeira vez por USB e, daí em diante, define a versão e atualiza sem cabo. O passo a passo está em [docs/FIRMWARE.md](docs/FIRMWARE.md#frota-e-ota).
 
 Os detalhes de cada parte estão em [docs/TINYML.md](docs/TINYML.md), [docs/FIRMWARE.md](docs/FIRMWARE.md) e [docs/INTEGRACOES.md](docs/INTEGRACOES.md).
 
@@ -120,7 +134,7 @@ Os detalhes de cada parte estão em [docs/TINYML.md](docs/TINYML.md), [docs/FIRM
 <p align="center"><em>Datasets em CSV com classes, amostras e prévia.</em></p>
 
 <p align="center"><img src="docs/imagens/dispositivos.png" alt="Dispositivos" width="900"></p>
-<p align="center"><em>Dispositivos cadastrados, com placa, porta e última gravação.</em></p>
+<p align="center"><em>Frota (dispositivos cadastrados), com placa, porta e última gravação.</em></p>
 
 <p align="center"><img src="docs/imagens/integracoes.png" alt="Integrações com VS Code e Claude Code" width="900"></p>
 <p align="center"><em>Passo a passo para conectar a extensão do VS Code e o MCP do Claude Code.</em></p>
@@ -158,6 +172,9 @@ A plataforma roda em contêineres, orquestrados pelo `docker-compose.yml`:
 flowchart LR
   navegador["Navegador<br/>(client)"] -->|"/api"| server["server<br/>Node 20 + Express"]
   vscode["VS Code / Claude Code"] -->|"/api com token aic_"| server
+  placas["Placas ESP32<br/>(firmware OTA)"] -->|"/api/ota (HTTP)"| server
+  placas -->|"telemetria e comandos (MQTT)"| mosquitto["mosquitto<br/>(MQTT, porta 1883)"]
+  server -->|"comandos e telemetria (MQTT)"| mosquitto
   server --> db[("db<br/>PostgreSQL 16")]
   server -->|"treinos"| trainer["trainer<br/>Python + TensorFlow"]
   server -->|"compilações"| builder["builder<br/>Python + PlatformIO"]
@@ -173,10 +190,11 @@ flowchart LR
 | Serviço | Tecnologia | Função |
 |---|---|---|
 | `client` | React 18, Vite, nginx | Interface web, na porta `WEB_PORT` (padrão 8080) |
-| `server` | Node 20, Express, Prisma | API HTTP, autenticação, agentes, projetos e filas |
+| `server` | Node 20, Express, Prisma | API HTTP, autenticação, agentes, projetos, fila de trabalhos e eventos ao vivo, frota |
 | `trainer` | Python 3.11, FastAPI, TensorFlow, scikit-learn | Treina os agentes e modelos TinyML e tabulares, e gera o TFLite, o `model_data.h` e o `modelo_tabular.h` |
 | `finetuner` | Python 3.11, FastAPI, PyTorch, PEFT | Ajuste fino local de LLM com LoRA (só com o perfil `gpu`, exige GPU NVIDIA) |
 | `builder` | Python 3.11, FastAPI, PlatformIO | Compila os projetos e grava as placas |
+| `mosquitto` | Eclipse Mosquitto 2.0 | Broker MQTT da frota. Porta 1883 (`MQTT_PORTA`) publicada para as placas da rede local |
 | `db` | PostgreSQL 16 | Dados da plataforma |
 | `ollama` | Ollama | Modelos locais (só com o perfil `ollama`) |
 
@@ -230,7 +248,7 @@ Os valores padrão são:
 - **E-mail:** `admin@aicreator.local`
 - **Senha:** `trocar123`
 
-Entre no endereço do site (por padrão `http://localhost:8080`) e troque a senha do administrador em **Sistema → Usuários** logo no primeiro acesso.
+Entre no endereço do site (por padrão `http://localhost:8080`). Se a senha ainda for a padrão (`ADMIN_SENHA` não foi definido), o sistema pede a troca da senha antes de liberar as outras telas.
 
 ## Configuração
 
@@ -246,8 +264,15 @@ O arquivo `.env` na raiz é lido pelo Docker Compose. O instalador cria esse arq
 | `ANTHROPIC_API_KEY` | vazio | Chave da API da Anthropic (agentes com provedor Claude) |
 | `OPENAI_API_KEY` | vazio | Chave da API da OpenAI (agentes com provedor OpenAI) |
 | `WEB_PORT` | `8080` | Porta do site no computador |
+| `MQTT_USUARIO` | `aic` | Usuário do broker MQTT das placas |
+| `MQTT_SENHA` | `troque-senha-mqtt` | Senha do broker MQTT (o instalador gera uma aleatória) |
+| `MQTT_PORTA` | `1883` | Porta do MQTT publicada no computador, para as placas da rede local |
+| `MQTT_HOST_PUBLICO` | vazio | Endereço que as placas usam para chegar ao MQTT (por exemplo, o IP da máquina na rede) |
+| `SERVIDOR_URL_PUBLICA` | vazio | Endereço que as placas usam para chegar ao servidor (por exemplo, `http://192.168.0.10:8080`) |
 
 Os valores padrão servem para teste. O instalador gera segredos aleatórios no `.env`. Não envie o `.env` para o Git: ele já está no `.gitignore`.
+
+Se `JWT_SECRET` ou `INTERNO_TOKEN` ficarem com o valor de exemplo, o servidor gera um segredo e o grava em `dados/segredos.json` (no Docker, `/data/segredos.json`). Assim os logins continuam válidos depois de reiniciar.
 
 Os agentes Ollama usam o modelo que estiver instalado no servidor Ollama local, que sobe com `--ollama` ou com `--profile ollama`.
 
@@ -301,6 +326,7 @@ Verificações antes de enviar uma mudança:
 
 ```bash
 cd server && npx tsc --noEmit
+cd server && npm test     # precisa de DATABASE_URL apontando para um PostgreSQL de teste
 cd client && npx tsc --noEmit && npm run build
 docker compose config -q
 ```

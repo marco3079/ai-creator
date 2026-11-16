@@ -19,18 +19,19 @@ Quem usa o resultado:
 
 | Tipo | Tarefas | Quando usar | Datasets aceitos | Saídas |
 |---|---|---|---|---|
-| **TinyML** | Classificação, regressão, classificação de imagens | Rede neural pequena para rodar em microcontrolador, como gestos com IMU ou imagens de uma ESP32-S3 | CSV (série temporal, tabela ou áudio) e imagens (`.zip`) | `model.tflite`, `model_data.h`, `metricas.json` |
+| **TinyML** | Classificação, regressão, classificação de imagens e de áudio (palavra-chave) | Rede neural pequena para rodar em microcontrolador, como gestos com IMU, imagens de uma ESP32-S3 ou palavras-chave | CSV (série temporal ou tabela), imagens (`.zip`) e áudio (`.zip` com `.wav`) | `model.tflite`, `model_data.h`, `metricas.json` |
 | **Tabular** | Classificação, regressão | Dados tabulares simples, com poucas features, quando uma rede neural seria exagero. Modelos pequenos (árvore, regressão) cabem em qualquer placa | CSV | `modelo.joblib`, `modelo_tabular.h` (quando o algoritmo exporta C), `metricas.json` |
 | **LLM na nuvem** | Chat | Ajustar um modelo da OpenAI com exemplos de conversa, para responder do seu jeito | Conversas (`.jsonl`) | Nome do modelo ajustado (`ft:...`) |
 | **LLM local** | Chat | Ajustar um modelo pequeno no seu computador, sem enviar dados para a nuvem. Exige GPU NVIDIA | Conversas (`.jsonl`) | Adaptador LoRA e modelo registrado no Ollama |
 
-Tipo e tarefa precisam combinar. TinyML aceita classificação, regressão e imagens. Tabular aceita classificação e regressão. Os dois tipos LLM aceitam apenas chat. Ao criar um modelo, a tela só oferece as combinações válidas.
+Tipo e tarefa precisam combinar. TinyML aceita classificação, regressão, imagens e áudio. Tabular aceita classificação e regressão. Os dois tipos LLM aceitam apenas chat. Ao criar um modelo, a tela só oferece as combinações válidas.
 
 ### Quando escolher TinyML ou tabular
 
 - Dados de sensor em sequência (acelerômetro, temperatura ao longo do tempo) com a classe no fim: **TinyML** com série temporal costuma ser a escolha.
 - Uma tabela com colunas numéricas e um alvo: **tabular** é mais simples e treina em segundos. Se o `algoritmo` permitir, o modelo sai como C puro (`modelo_tabular.h`).
 - Fotos de objetos ou formas: **TinyML** com tarefa `IMAGEM` (CNN 2D).
+- Palavras-chave em gravações de áudio (`.wav`): **TinyML** com tarefa `AUDIO` (veja [Áudio e palavra-chave](#áudio-e-palavra-chave)).
 
 ### Quando escolher LLM na nuvem ou local
 
@@ -115,6 +116,84 @@ Regras:
 
 Se o modelo tiver um **prompt de sistema** na configuração, ele é adicionado como mensagem `system` às conversas que não tiverem uma. Isso acontece sem alterar o arquivo original.
 
+## Áudio e palavra-chave
+
+Um modelo TinyML com tarefa `AUDIO` reconhece palavras-chave (KWS) a partir de arquivos `.wav`. O dataset é do tipo **SONS**.
+
+### Dataset SONS
+
+Um `.zip` com uma pasta por classe, e dentro de cada pasta os arquivos `.wav`. O nome da pasta é o rótulo.
+
+```
+palavras.zip
+  sim/
+    001.wav
+    002.wav
+  nao/
+    001.wav
+  ruido/
+    001.wav
+```
+
+Regras:
+
+- Os arquivos são `.wav` em PCM de 16 bits. A taxa de amostragem pode ser qualquer uma: o `trainer` reamostra o áudio para a taxa do modelo (`taxaHz`).
+- As regras de pastas, caminhos e arquivos ocultos são as mesmas do zip de imagens.
+- Cada `.wav` do dataset pode ser baixado pela rota `GET /api/datasets/:id/audio?caminho=`, descrita em [API.md](API.md).
+
+### Parâmetros do áudio
+
+Os parâmetros ficam em `entrada.audio` da configuração do modelo. Os valores padrão são:
+
+| Parâmetro | Padrão | Limites | Para que serve |
+|---|---|---|---|
+| `taxaHz` | 16000 | | Taxa em que o áudio é reamostrado antes do cálculo |
+| `duracaoMs` | 1000 | | Duração de cada exemplo |
+| `janelaMs` | 30 | 10 a 64 | Largura da janela de análise |
+| `passoMs` | 20 | | Deslocamento entre duas janelas |
+| `canaisMel` | 40 | 10 a 80 | Número de bandas de frequência (features por quadro) |
+
+Os outros padrões do treino são a arquitetura **DS_CNN** (leve, para microcontroladores), 40 épocas, taxa de aprendizado de 0,003, lote de 16 exemplos e **aumento de dados** ligado (deslocamento no tempo e ruído).
+
+### Cálculo das features e a placa
+
+As features são calculadas pelo micro-frontend do TFLite, o mesmo do exemplo `micro_speech` do TFLite Micro. Assim a placa calcula exatamente o que o modelo viu no treino. Se o módulo não existir no pacote instalado, o `trainer` usa log-mel com `tf.signal` e avisa no log. Nesse caso, a placa precisa fazer o mesmo cálculo.
+
+Junto com o modelo, o treino gera o `features_audio.h`, com os parâmetros em `#define`:
+
+| Define | Significado |
+|---|---|
+| `AIC_AUDIO_TAXA_HZ`, `AIC_AUDIO_DURACAO_MS` | Taxa e duração do exemplo |
+| `AIC_AUDIO_JANELA_MS`, `AIC_AUDIO_PASSO_MS` | Janela e passo, em milissegundos |
+| `AIC_AUDIO_JANELA_AMOSTRAS`, `AIC_AUDIO_PASSO_AMOSTRAS` | Janela e passo, em amostras |
+| `AIC_AUDIO_CANAIS_MEL`, `AIC_AUDIO_QUADROS` | Bandas por quadro e número de quadros do exemplo |
+| `AIC_AUDIO_FAIXA_INFERIOR_HZ`, `AIC_AUDIO_FAIXA_SUPERIOR_HZ` | Faixa de frequências usada |
+
+A normalização das features fica dentro do modelo (camada de normalização do próprio modelo), por isso o `features_audio.h` não traz constantes de média e desvio. A placa passa as features brutas, calculadas pelo micro-frontend, sem normalizar por conta própria.
+
+O `features_audio.h` é um arquivo `HEADER_C` do treino: ao embutir o treino no projeto, ele vai para `include/` junto com o `model_data.h`. Esboço do uso na placa:
+
+```cpp
+#include "features_audio.h"   // parâmetros gerados pelo trainer
+#include "model_data.h"       // g_model, com o modelo INT8
+
+// 1) Leia AIC_AUDIO_DURACAO_MS de áudio do microfone, na taxa AIC_AUDIO_TAXA_HZ.
+// 2) Calcule AIC_AUDIO_QUADROS quadros de AIC_AUDIO_CANAIS_MEL valores, com o mesmo
+//    micro-frontend do exemplo micro_speech do TFLite Micro.
+// 3) O tensor de entrada é INT8: quantize com o scale e o zero_point do tensor.
+// 4) Execute o modelo e leia a saída (uma pontuação por classe).
+```
+
+## Testar antes de gravar
+
+Na aba **Testar** do modelo, você roda uma versão (um treino com SUCESSO) no servidor. A previsão usa o mesmo `.tflite` INT8 (ou o `.joblib`, nos tabulares) que vai para a placa. A entrada depende da tarefa:
+
+- **Valores** (classificação e regressão): números separados por vírgula, na ordem das colunas do CSV.
+- **Imagem** (tarefa `IMAGEM`): arquivo de até 8 MB.
+- **Áudio** (tarefa `AUDIO`): arquivo `.wav` de até 4 MB.
+
+O resultado mostra a classe com as probabilidades, ou o valor previsto na regressão, com a saída bruta do modelo. A latência que aparece é a do servidor. Na placa ela é outra. A rota é `POST /treinos-modelo/:id/prever`, descrita em [API.md](API.md).
+
 ## Fluxo de treino
 
 1. **Crie o modelo** em **Modelos → Novo modelo**. Escolha o tipo, a tarefa e, se quiser, o dataset padrão. Ajuste a configuração na aba **Configuração**.
@@ -135,7 +214,7 @@ Cada tipo mostra uma métrica principal, usada na lista de modelos e na compara�
 
 | Tipo e tarefa | Métrica principal | Outras métricas |
 |---|---|---|
-| TinyML classificação ou imagem | Acurácia de validação | Matriz de confusão, histórico por época |
+| TinyML classificação, imagem ou áudio | Acurácia de validação | Matriz de confusão, histórico por época |
 | TinyML regressão | R² | MAE, RMSE, histórico por época |
 | Tabular classificação | Acurácia no conjunto de teste | F1 macro, precisão, recall, matriz de confusão, validação cruzada |
 | Tabular regressão | R² | MAE, RMSE, validação cruzada |
@@ -152,7 +231,7 @@ Dicas para comparar:
 
 Modelos TinyML e tabulares viram cabeçalhos C. O projeto de firmware recebe os arquivos em `include/` quando você escolhe o modelo no seletor **Embutir modelo** da tela do projeto. O grupo **Modelos treinados** lista os treinos publicados.
 
-Só são copiados os arquivos do tipo `HEADER_C`: `model_data.h` (TinyML) e `modelo_tabular.h` (tabular, quando o algoritmo exporta C).
+Só são copiados os arquivos do tipo `HEADER_C`: `model_data.h` (TinyML), `features_audio.h` (TinyML de áudio) e `modelo_tabular.h` (tabular, quando o algoritmo exporta C).
 
 ### TinyML: `model_data.h`
 
@@ -306,4 +385,4 @@ A tela de criação mostra se o `finetuner` está disponível e se há GPU. Sem 
 
 ## Próximos passos
 
-Ideias para a área estão em [SUGESTOES.md](SUGESTOES.md): reconhecimento de palavras-chave por áudio com MFCC, AutoML, rastreamento de experimentos e avaliação de LLM ajustado.
+Ideias para a área estão em [SUGESTOES.md](SUGESTOES.md): AutoML, rastreamento de experimentos e avaliação de LLM ajustado.

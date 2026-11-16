@@ -198,5 +198,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validar docker-compose.yml
-        run: docker compose config -q
+      - name: Validar docker-compose.yml (sem perfis e com perfis)
+        run: |
+          docker compose config -q
+          docker compose --profile ollama --profile gpu config -q

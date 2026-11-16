@@ -23,6 +23,7 @@ const CallbackBuildEsquema = z.object({
   status: StatusEsquema,
   log: z.string().optional(),
   artefato: z.string().optional(),
+  artefatoOta: z.string().optional(),
   offset: z.string().optional(),
   tamanhoBytes: z.number().int().nonnegative().optional(),
 });
@@ -44,6 +45,7 @@ router.get(
         status: true,
         tamanhoBytes: true,
         offset: true,
+        artefatoOta: true,
         criadoEm: true,
         finalizadoEm: true,
       },
@@ -152,6 +154,7 @@ router.post(
         status: corpo.status,
         log: corpo.log !== undefined ? atual.log + corpo.log : undefined,
         artefato: corpo.artefato,
+        artefatoOta: corpo.artefatoOta,
         offset: corpo.offset,
         tamanhoBytes: corpo.tamanhoBytes,
         finalizadoEm: finaliza ? new Date() : undefined,

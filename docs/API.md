@@ -42,15 +42,16 @@ Toda rota de escrita exige `ADMIN` ou `DEV`, salvo quando a tabela indicar outra
 | POST | `/auth/login` | público | Corpo `{ email, senha }`. Devolve `{ token, usuario }` |
 | POST | `/auth/sair` | logado | Encerra a sessão. Devolve `204` |
 | GET | `/auth/eu` | logado | Devolve `{ usuario }` |
+| POST | `/auth/trocar-senha` | logado | Corpo `{ senhaAtual, novaSenha }`. A nova senha tem no mínimo 8 caracteres e precisa ser diferente da atual e do e-mail. Devolve `{ token, usuario }` com `trocarSenha: false` |
 
-`UsuarioPublico = { id, nome, email, perfil }`.
+`UsuarioPublico = { id, nome, email, perfil, trocarSenha }`. `trocarSenha` é `true` quando o usuário precisa trocar a senha antes de usar o sistema. Isso acontece com a senha padrão do administrador e quando outro administrador redefine a senha. Enquanto for `true`, a interface só libera a tela de troca de senha.
 
 ### Usuários (`/api/usuarios`)
 
 | Método | Rota | Perfil | Descrição |
 |---|---|---|---|
 | GET | `/usuarios` | ADMIN | Lista usuários: `UsuarioPublico & { ativo, criadoEm }[]` |
-| POST | `/usuarios` | ADMIN | Corpo `{ nome, email, senha, perfil }` |
+| POST | `/usuarios` | ADMIN | Corpo `{ nome, email, senha, perfil }`. O novo usuário sai com `trocarSenha: true` |
 | PUT | `/usuarios/:id` | ADMIN | Corpo parcial `{ nome?, email?, senha?, perfil?, ativo? }` |
 | DELETE | `/usuarios/:id` | ADMIN | Remove o usuário. Não permite remover a própria conta. `204` |
 
@@ -101,6 +102,21 @@ Resposta:
 ```
 
 `buildsPorDia` tem 14 dias, incluindo os dias sem atividade. `recentes` tem 6 itens. `destaque` é o agente atualizado por último, ou `null`.
+
+### Fila e eventos ao vivo
+
+Treinos e compilações entram numa fila no banco e são enviados pelo despachante (veja [ARQUITETURA.md](ARQUITETURA.md)).
+
+| Método | Rota | Perfil | Descrição |
+|---|---|---|---|
+| GET | `/fila` | logado | Situação por serviço: `{ servicos: { nome, capacidade, executando, naFila, online }[] }`. Os serviços são `trainer`, `builder`, `finetuner` e `openai` |
+| GET | `/eventos` | logado | Stream SSE (`text/event-stream`) dos eventos dos trabalhos e da frota |
+
+Cada evento é uma linha `data: <json>`, seguida de linha em branco. O JSON tem `tipo` (`treino`, `treinoModelo`, `build` ou `dispositivo`), `id`, `status` (nos trabalhos), o id do agente, do modelo ou do projeto, e `em` (ISO). A conexão recebe `: ping` a cada 25 segundos.
+
+```
+data: {"tipo":"build","id":12,"status":"SUCESSO","projetoId":3,"em":"2026-11-16T12:00:00.000Z"}
+```
 
 ---
 
@@ -187,8 +203,11 @@ curl -H "Authorization: Bearer aic_seu_token" \
 A resposta é `text/event-stream`. Cada evento é uma linha `data: <json>` seguida de linha em branco:
 
 - `{"tipo":"texto","texto":"..."}`: trecho da resposta;
-- `{"tipo":"fim","uso":{"entrada":123,"saida":456}}`: fim, com o uso de tokens;
+- `{"tipo":"ferramenta","id":"...","nome":"aic.compilar","entrada":"...","fase":"inicio"}` e, depois, `{"tipo":"ferramenta","id":"...","nome":"aic.compilar","resultado":"...","erro":false,"fase":"fim"}`: chamada de ferramenta da plataforma (só com ferramentas ligadas);
+- `{"tipo":"fim","uso":{"entrada":123,"saida":456,"custoUsd":0.0012}}`: fim, com o uso de tokens e o custo estimado em dólares (`custoUsd` é `null` quando o modelo não tem preço);
 - `{"tipo":"erro","erro":"mensagem"}`: falha no provedor.
+
+O evento `fim` vem em toda execução, com ou sem ferramentas. Com ferramentas ligadas, o agente precisa ter `projetoId` e ferramentas `aic.*` marcadas; o Ollama roda sem ferramentas e avisa com um evento `texto`. Detalhes em [INTEGRACOES.md](INTEGRACOES.md).
 
 Se o cliente desconectar, o servidor cancela a chamada ao provedor.
 
@@ -216,6 +235,16 @@ curl -N -X POST http://localhost:8080/api/agentes/1/executar \
 | GET | `/llm/modelos` | logado | `{ ANTHROPIC: string[], OPENAI: string[], OLLAMA: string[] }`. Os modelos do Ollama vêm de `OLLAMA_URL/api/tags`, com tempo limite de 2 s, e voltam `[]` se falhar |
 | GET | `/llm/status` | logado | `{ ANTHROPIC: boolean, OPENAI: boolean, OLLAMA: boolean }`. Diz se a chave está configurada ou se o Ollama respondeu |
 
+### Uso e custos (`/api/uso`)
+
+Cada execução de agente é registrada com os tokens de entrada e saída e o custo estimado. Os preços vêm de uma tabela padrão da plataforma (USD por 1 milhão de tokens), que a plataforma pode sobrescrever. Modelos do Ollama custam zero.
+
+| Método | Rota | Perfil | Descrição |
+|---|---|---|---|
+| GET | `/uso/resumo?dias=30` | logado | Totais do período (de 1 a 365 dias, padrão 30), por dia, por agente e por modelo |
+| GET | `/uso/precos` | logado | Devolve `{ padrao, personalizados }`, os preços por modelo |
+| PUT | `/uso/precos` | ADMIN | Corpo `{ precos }`. Sobrescreve ou acrescenta preços de modelos |
+
 ---
 
 ## Dados e treinos (TinyML)
@@ -229,9 +258,10 @@ O CSV tem cabeçalho `rotulo,f0,f1,...,fN`. Cada linha seguinte tem o rótulo (t
 | GET | `/datasets` | logado | Lista `{ id, nome, descricao, tipo, classes, janela, amostras, colunas, criadoEm }[]` |
 | POST | `/datasets` | DEV, ADMIN | Corpo `{ nome, descricao?, tipo, janela?, csv }`. Valida o CSV, calcula classes, amostras e colunas, e grava em `/data/datasets/<id>.csv` |
 | DELETE | `/datasets/:id` | DEV, ADMIN | Remove o dataset. `204` |
-| POST | `/datasets/arquivo?nome=&tipo=IMAGENS\|CONVERSAS&descricao=` | DEV, ADMIN | Envia um arquivo em corpo binário (`Content-Type` livre, até 200 MB). `IMAGENS` aceita `.zip` com uma pasta por classe; `CONVERSAS` aceita `.jsonl`. Valida tudo antes de gravar e responde 400 com a linha ou o arquivo com erro. Devolve o dataset |
-| GET | `/datasets/:id/amostra` | logado | Devolve `AmostraDataset` com o campo `formato`. `TABELA`: as 20 primeiras linhas (`{ cabecalho, linhas }`). `IMAGENS`: a quantidade por classe e até 4 `exemplos` por classe. `CONVERSAS`: as 5 primeiras conversas |
+| POST | `/datasets/arquivo?nome=&tipo=IMAGENS\|SONS\|CONVERSAS&descricao=` | DEV, ADMIN | Envia um arquivo em corpo binário (`Content-Type` livre, até 200 MB). `IMAGENS` aceita `.zip` com uma pasta por classe; `SONS` aceita `.zip` com uma pasta por classe e arquivos `.wav` (PCM 16 bits); `CONVERSAS` aceita `.jsonl`. Valida tudo antes de gravar e responde 400 com a linha ou o arquivo com erro. Devolve o dataset |
+| GET | `/datasets/:id/amostra` | logado | Devolve `AmostraDataset` com o campo `formato`. `TABELA`: as 20 primeiras linhas (`{ cabecalho, linhas }`). `IMAGENS`: a quantidade por classe e até 4 `exemplos` por classe. `SONS`: as classes com exemplos (`formato: "SONS"`). `CONVERSAS`: as 5 primeiras conversas |
 | GET | `/datasets/:id/imagem?caminho=classe/arquivo.jpg` | logado | Devolve a imagem de um dataset `IMAGENS`. O caminho precisa estar dentro da pasta do dataset |
+| GET | `/datasets/:id/audio?caminho=classe/arquivo.wav` | logado | Devolve o `.wav` de um dataset `SONS`. O caminho precisa estar dentro da pasta do dataset |
 | GET | `/datasets/:id/csv` | logado | Baixa o CSV (datasets `TABELA`, `SERIE_TEMPORAL` e `AUDIO`) |
 | GET | `/datasets/:id/arquivo` | logado | Baixa o arquivo de um dataset `CONVERSAS` (`.jsonl`). Para `IMAGENS` responde 400: baixe as imagens pela pasta do volume |
 
@@ -241,7 +271,7 @@ Formatos dos arquivos de dataset de modelos, com exemplos, estão em [MODELOS.md
 
 | Método | Rota | Perfil | Descrição |
 |---|---|---|---|
-| POST | `/agentes/:id/treinar` | DEV, ADMIN | Só TinyML. Corpo `{ datasetId, parametros?: Partial<ConfigTinyml> }`. Cria o treino na fila, envia ao `trainer` e muda para EXECUTANDO. Devolve `Treino` |
+| POST | `/agentes/:id/treinar` | DEV, ADMIN | Só TinyML. Corpo `{ datasetId, parametros?: Partial<ConfigTinyml> }`. Cria o treino em FILA e acorda o despachante, que envia ao `trainer` quando há vaga. Devolve `Treino` (201) com status FILA |
 | GET | `/treinos?agenteId=` | logado | Lista `{ id, agenteId, datasetId, status, metricas, tamanhoBytes, criadoEm, finalizadoEm }[]` |
 | GET | `/treinos/:id` | logado | Devolve o treino completo, com `log` |
 | GET | `/treinos/:id/modelo.tflite` | logado | Baixa o modelo TFLite |
@@ -262,7 +292,7 @@ Um modelo tem tipo (`TINYML`, `TABULAR`, `LLM_NUVEM` ou `LLM_LOCAL`), tarefa (`C
 | PUT | `/modelos/:id` | DEV, ADMIN | Corpo parcial `{ nome?, descricao?, datasetId?, config?, tags? }` |
 | DELETE | `/modelos/:id` | DEV, ADMIN | Remove o modelo e a pasta de artefatos. `204` |
 | POST | `/modelos/:id/duplicar` | DEV, ADMIN | Cria `<nome> (cópia)` sem treinos |
-| POST | `/modelos/:id/treinar` | DEV, ADMIN | Corpo `{ datasetId?, parametros? }`. Cria um treino novo (numerado) e o envia ao serviço do tipo. Devolve o `TreinoModelo` (201) |
+| POST | `/modelos/:id/treinar` | DEV, ADMIN | Corpo `{ datasetId?, parametros? }`. Cria um treino novo (numerado) em FILA, que o despachante envia ao serviço do tipo quando há vaga. Devolve o `TreinoModelo` (201) |
 | GET | `/modelos/:id/treinos` | logado | Lista `TreinoModeloResumo[]`, do mais recente para o mais antigo |
 
 ### Treinos de modelo (`/api/treinos-modelo`)
@@ -274,6 +304,21 @@ Um modelo tem tipo (`TINYML`, `TABULAR`, `LLM_NUVEM` ou `LLM_LOCAL`), tarefa (`C
 | POST | `/treinos-modelo/:id/publicar` | DEV, ADMIN | Publica um treino em SUCESSO como versão em uso. Desmarca o publicado anterior do mesmo modelo |
 | GET | `/treinos-modelo/:id/artefatos/:nome` | logado | Baixa um artefato (`model.tflite`, `model_data.h`, `modelo.joblib`, `adapter_model.safetensors` etc.) |
 | POST | `/treinos-modelo/:id/criar-agente` | DEV, ADMIN | Só LLM com SUCESSO. Cria um agente LLM que usa o `modeloResultante` (OpenAI para `LLM_NUVEM`, Ollama para `LLM_LOCAL`) |
+| POST | `/treinos-modelo/:id/prever` | logado | Testa um treino com SUCESSO de tipo `TINYML` ou `TABULAR`, pela aba **Testar**. Corpo com exatamente um campo: `valores` (lista de números), `imagemBase64` ou `audioBase64`. Devolve `ResultadoPrevisao`. Entrada inválida responde 400 com a mensagem, e o trainer fora do ar responde 503 |
+
+`ResultadoPrevisao` em classificação:
+
+```json
+{
+  "classe": "acenar",
+  "probabilidades": [{ "classe": "acenar", "valor": 0.91 }, { "classe": "parado", "valor": 0.09 }],
+  "saidaBruta": [0.91, 0.09],
+  "latenciaMs": 14,
+  "avisos": []
+}
+```
+
+Em regressão, a resposta traz `valor` (já desnormalizado) no lugar de `classe` e `probabilidades`. A `latenciaMs` é a do servidor, não a da placa.
 
 Um treino passa por FILA, EXECUTANDO e depois SUCESSO, FALHA ou CANCELADO. Os treinos de LLM na nuvem são acompanhados em segundo plano, a cada 30 segundos, pelo servidor.
 
@@ -290,7 +335,7 @@ Um treino passa por FILA, EXECUTANDO e depois SUCESSO, FALHA ou CANCELADO. Os tr
 | Método | Rota | Perfil | Descrição |
 |---|---|---|---|
 | GET | `/projetos` | logado | Lista `{ id, nome, slug, descricao, placa, framework, atualizadoEm, totalArquivos, ultimoBuild }[]` |
-| POST | `/projetos` | DEV, ADMIN | Corpo `{ nome, descricao?, placa }`. Cria o projeto com os arquivos-modelo da placa |
+| POST | `/projetos` | DEV, ADMIN | Corpo `{ nome, descricao?, placa, modelo? }`. Cria o projeto com os arquivos-modelo da placa. `modelo` é `BLINK` (padrão), `COLETOR` (coleta pela serial) ou `OTA` (frota; só ESP32 e ESP32-S3, senão responde 400) |
 | GET | `/projetos/:id` | logado | Devolve o projeto com `arquivos: { caminho, atualizadoEm }[]` |
 | PUT | `/projetos/:id` | DEV, ADMIN | Corpo parcial `{ nome?, descricao?, placa? }`. Trocar a placa reescreve só o `platformio.ini` |
 | DELETE | `/projetos/:id` | DEV, ADMIN | Remove o projeto. `204` |
@@ -307,24 +352,69 @@ Um treino passa por FILA, EXECUTANDO e depois SUCESSO, FALHA ou CANCELADO. Os tr
 
 Caminhos com `..`, barra invertida (`\`) ou caminho absoluto devolvem `400`.
 
+### Histórico de versões (`/api/projetos`)
+
+O `:id` aceita o número ou o slug do projeto. As versões automáticas (criadas pelas compilações) não têm autor. Se nada mudou desde a última versão, nenhuma nova é criada.
+
+| Método | Rota | Perfil | Descrição |
+|---|---|---|---|
+| GET | `/projetos/:id/versoes` | logado | Lista `{ numero, mensagem, autor: { id, nome } \| null, buildId, criadoEm, totalArquivos }[]`, da mais recente para a mais antiga. Não traz o conteúdo dos arquivos |
+| POST | `/projetos/:id/versoes` | DEV, ADMIN | Corpo `{ mensagem }` (de 1 a 200 caracteres). Salva o estado atual como versão manual. Devolve a versão (201). Responde 409 se nada mudou desde a última versão |
+| GET | `/projetos/:id/versoes/:numero` | logado | Devolve a versão com `arquivos: { caminho, conteudo }[]` |
+| POST | `/projetos/:id/versoes/:numero/restaurar` | DEV, ADMIN | Antes de restaurar, salva a versão automática `Antes de restaurar a v<n>` (se houver mudança) e substitui os arquivos do projeto pelos da versão. Devolve `{ restaurada, totalArquivos }` |
+| GET | `/projetos/:id/git.zip` | logado | Baixa um `.zip` com um repositório Git, um commit por versão, em ordem crescente. Responde 409 se o projeto não tem versões |
+
+Exemplo, salvando uma versão manual:
+
+```bash
+curl -X POST http://localhost:8080/api/projetos/blink-esp32/versoes \
+  -H "Authorization: Bearer aic_seu_token" \
+  -H "Content-Type: application/json" \
+  -d '{"mensagem":"Pisca em 500 ms"}'
+```
+
 ### Compilações (`/api/builds`)
 
 | Método | Rota | Perfil | Descrição |
 |---|---|---|---|
-| POST | `/projetos/:id/build` | DEV, ADMIN | Corpo `{ agenteId?, modeloTreinoId? }`. Grava os arquivos em `/data/projetos/<slug>/`, copia o `model_data.h` do agente (se houver treino) para `include/`, envia ao `builder` e muda para EXECUTANDO. Devolve `Build` |
+| POST | `/projetos/:id/build` | DEV, ADMIN | Corpo `{ agenteId?, modeloTreinoId? }`. Grava os arquivos em `/data/projetos/<slug>/`, copia o `model_data.h` do agente (se houver treino) para `include/`, grava `include/aic_versao.h` com o id do build e cria o build em FILA. O despachante envia ao `builder` quando há vaga. Devolve `Build` (202) com status FILA |
 | GET | `/builds?projetoId=` | logado | Lista `{ id, projetoId, placa, status, tamanhoBytes, offset, criadoEm, finalizadoEm }[]` |
 | GET | `/builds/:id` | logado | Devolve a compilação completa, com `log` |
 | GET | `/builds/:id/firmware` | logado | Baixa o firmware gerado |
 | POST | `/builds/:id/gravar` | DEV, ADMIN | Corpo `{ porta }`. Repassa ao `builder` e devolve `{ ok, log }`. Só funciona no Linux, com a USB mapeada |
 
-### Dispositivos (`/api/dispositivos`)
+### Frota e dispositivos (`/api/dispositivos`)
+
+Os dispositivos cadastrados são as placas da bancada e as da frota OTA. `DispositivoFrota = { id, nome, placa, porta, notas, projetoId, projeto, chavePrefixo, online, ultimoContato, ip, telemetria, buildAtualId, buildAlvoId, ultimaOta, statusOta, ultimoBuildId, ultimaGravacao, criadoEm }`. A chave não aparece nessa resposta: só o prefixo (`chavePrefixo`).
 
 | Método | Rota | Perfil | Descrição |
 |---|---|---|---|
-| GET | `/dispositivos` | logado | Lista os dispositivos |
-| POST | `/dispositivos` | DEV, ADMIN | Corpo `{ nome, placa, porta?, notas? }` |
-| PUT | `/dispositivos/:id` | DEV, ADMIN | Atualização parcial |
+| GET | `/dispositivos` | logado | Lista `DispositivoFrota[]` |
+| GET | `/dispositivos/:id` | logado | Devolve o `DispositivoFrota` |
+| POST | `/dispositivos` | DEV, ADMIN | Corpo `{ nome, placa, porta?, notas?, projetoId? }` |
+| PUT | `/dispositivos/:id` | DEV, ADMIN | Atualização parcial, com `projetoId?` |
 | DELETE | `/dispositivos/:id` | DEV, ADMIN | Remove o dispositivo. `204` |
+| POST | `/dispositivos/:id/chave` | DEV, ADMIN | Gera uma chave nova (`aicd_` seguido de 40 hex) e invalida a anterior. Devolve `ChaveGerada` (`{ chave, prefixo }`). A chave aparece só nessa resposta |
+| PUT | `/dispositivos/:id/alvo` | DEV, ADMIN | Corpo `{ buildId: number \| null }`. Só aceita build SUCESSO da mesma placa, com firmware OTA. `null` tira o alvo |
+| POST | `/dispositivos/:id/comando` | DEV, ADMIN | Corpo `{ acao: "atualizar" \| "reiniciar" }`. Publica o comando no MQTT. Responde 503 se o broker estiver fora |
+| GET | `/dispositivos/:id/telemetria?horas=24` | logado | Lista `AmostraTelemetria[]` (`{ em, dados }`), em ordem crescente, com no máximo 2000 pontos |
+| GET | `/dispositivos/:id/config.h?chave=` | logado | Baixa o `aic_config.h` para o projeto OTA. Exige a chave gerada agora (a chave não fica guardada em claro no servidor) |
+
+O `aic_config.h` traz `AIC_DISPOSITIVO_ID`, `AIC_DISPOSITIVO_CHAVE`, `AIC_SERVIDOR_URL`, `AIC_MQTT_HOST`, `AIC_MQTT_PORTA`, `AIC_MQTT_USUARIO` e `AIC_MQTT_SENHA`. Os campos `AIC_WIFI_SSID` e `AIC_WIFI_SENHA` vêm vazios para o usuário preencher. O endereço do servidor e do MQTT vem de `SERVIDOR_URL_PUBLICA` e `MQTT_HOST_PUBLICO`; sem eles, usa o host da requisição.
+
+A frota emite eventos `tipo: "dispositivo"` em `/api/eventos` quando muda online, telemetria ou status da OTA.
+
+### Placas OTA (`/api/ota`)
+
+Rotas usadas pela placa, sem login. Exigem os cabeçalhos `X-Dispositivo-Id` e `X-Dispositivo-Chave`. Cada dispositivo tem o limite de 30 requisições por minuto.
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/ota/verificar?versao=<buildId atual>` | Devolve `{ atualizar: false }` ou `{ atualizar: true, buildId, url, tamanho, md5 }`. Só oferece builds SUCESSO da mesma placa que for o alvo do dispositivo. Atualiza o último contato |
+| GET | `/ota/firmware/:buildId` | Devolve o binário da aplicação (`application/octet-stream`, com `x-MD5`), só para o build alvo |
+| POST | `/ota/resultado` | Corpo `{ buildId, ok, mensagem? }`. Grava o status da OTA e, com `ok`, passa a versão atual para o build |
+
+O canal MQTT da frota (telemetria, status e comandos) não é HTTP. Ele está descrito em [ARQUITETURA.md](ARQUITETURA.md#frota-e-ota) e em [FIRMWARE.md](FIRMWARE.md#frota-e-ota).
 
 ---
 

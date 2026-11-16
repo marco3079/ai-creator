@@ -7,7 +7,7 @@ import { autenticar, exigirPerfil } from '../../lib/auth';
 import { gerarSlug, slugUnico } from '../../lib/slug';
 import { registrar } from '../../lib/log';
 import { validarCaminho } from './caminhos';
-import { Placa, PLACAS_PROJETO, arquivosModelo, iniPara } from './modelos';
+import { Placa, PLACAS_PROJETO, arquivosModelo, ehProjetoOta, iniPara, modeloSuportado } from './modelos';
 import { criarBuild } from './build';
 
 const router = Router();
@@ -43,7 +43,7 @@ const BuildEsquema = z.object({
   modeloTreinoId: z.number().int().positive().optional(),
 });
 
-// Modelo de firmware do projeto novo (A05 implementa; OTA cai em BLINK até a leva B).
+// Modelo de firmware do projeto novo (OTA só para placas com Wi-Fi).
 const ModeloFirmwareEsquema = z.enum(['BLINK', 'COLETOR', 'OTA']).optional();
 
 // Aceita id numérico ou slug na URL.
@@ -115,6 +115,9 @@ router.post(
   rota(async (req, res) => {
     const corpo = ProjetoEsquema.parse(req.body);
     const modelo = ModeloFirmwareEsquema.parse((req.body as { modelo?: unknown })?.modelo) ?? 'BLINK';
+    if (!modeloSuportado(corpo.placa, modelo)) {
+      throw new ErroHttp(400, 'OTA só para ESP32 e ESP32-S3');
+    }
     const slug = await gerarSlugProjeto(corpo.nome);
     const projeto = await prisma.projeto.create({
       data: {
@@ -150,6 +153,19 @@ router.put(
   rota(async (req, res) => {
     const projetoAtual = await buscarProjeto(req);
     const corpo = ProjetoAtualizarEsquema.parse(req.body);
+    // Troca de placa: se o projeto é OTA, a nova placa precisa de Wi-Fi e o ini mantém lib_deps e partições.
+    // A checagem roda antes do update para não gravar nada quando recusar.
+    let iniNovo: string | undefined;
+    if (corpo.placa && corpo.placa !== projetoAtual.placa) {
+      const iniAtual = await prisma.arquivoProjeto.findUnique({
+        where: { projetoId_caminho: { projetoId: projetoAtual.id, caminho: 'platformio.ini' } },
+      });
+      const ota = iniAtual !== null && ehProjetoOta(iniAtual.conteudo);
+      if (ota && !modeloSuportado(corpo.placa as Placa, 'OTA')) {
+        throw new ErroHttp(400, 'OTA só para ESP32 e ESP32-S3');
+      }
+      iniNovo = iniPara(corpo.placa as Placa, ota ? 'OTA' : 'BLINK');
+    }
     const projeto = await prisma.projeto.update({
       where: { id: projetoAtual.id },
       data: {
@@ -158,11 +174,11 @@ router.put(
         placa: corpo.placa,
       },
     });
-    if (corpo.placa && corpo.placa !== projetoAtual.placa) {
+    if (iniNovo !== undefined) {
       await prisma.arquivoProjeto.upsert({
         where: { projetoId_caminho: { projetoId: projeto.id, caminho: 'platformio.ini' } },
-        update: { conteudo: iniPara(corpo.placa as Placa) },
-        create: { projetoId: projeto.id, caminho: 'platformio.ini', conteudo: iniPara(corpo.placa as Placa) },
+        update: { conteudo: iniNovo },
+        create: { projetoId: projeto.id, caminho: 'platformio.ini', conteudo: iniNovo },
       });
     }
     res.json(

@@ -72,11 +72,15 @@ Write-Host 'Docker OK.' -ForegroundColor Green
 # 2) Arquivo .env com segredos aleatórios (só cria se não existir)
 if (Test-Path $arquivoEnv) {
     Write-Host 'Arquivo .env já existe; será mantido.'
+    # Instalação anterior sem o broker MQTT: gera a senha só se estiver vazia
+    if (-not (Ler-Env 'MQTT_SENHA')) { Gravar-Env 'MQTT_SENHA' (Gerar-Segredo) }
+    if (-not (Ler-Env 'MQTT_USUARIO')) { Gravar-Env 'MQTT_USUARIO' 'aic' }
 } else {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '.env.example') -Destination $arquivoEnv
     Gravar-Env 'POSTGRES_PASSWORD' (Gerar-Segredo)
     Gravar-Env 'JWT_SECRET' (Gerar-Segredo)
     Gravar-Env 'INTERNO_TOKEN' (Gerar-Segredo)
+    Gravar-Env 'MQTT_SENHA' (Gerar-Segredo)
     Write-Host 'Arquivo .env criado com segredos aleatórios.'
 }
 
@@ -91,6 +95,20 @@ if (-not $SemPerguntas) {
         $chave = Read-Host 'Chave da API OpenAI (Enter para pular)' -AsSecureString
         $texto = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($chave))
         if ($texto) { Gravar-Env 'OPENAI_API_KEY' $texto }
+    }
+    # IP desta máquina para as placas ESP32 (opcional)
+    if (-not (Ler-Env 'MQTT_HOST_PUBLICO')) {
+        $ip = (Read-Host 'IP desta máquina na rede para as placas ESP32, ex. 192.168.0.10 (Enter para pular)').Trim()
+        if ($ip) {
+            if ($ip -notmatch '^[0-9A-Za-z.-]+$') {
+                Write-Host 'IP inválido; pulando. Edite MQTT_HOST_PUBLICO no .env depois.' -ForegroundColor Yellow
+            } else {
+                $portaWebIp = Ler-Env 'WEB_PORT'
+                if (-not $portaWebIp) { $portaWebIp = '8080' }
+                Gravar-Env 'MQTT_HOST_PUBLICO' $ip
+                Gravar-Env 'SERVIDOR_URL_PUBLICA' "http://${ip}:$portaWebIp"
+            }
+        }
     }
 }
 

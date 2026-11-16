@@ -25,8 +25,10 @@ cd extensions/vscode
 npm install
 npm run compile
 npx vsce package --no-dependencies
-code --install-extension ai-creator-0.1.0.vsix
+code --install-extension ai-creator-0.2.0.vsix
 ```
+
+As versões publicadas também saem como arquivo `.vsix` na página de Releases do GitHub (veja [Publicar a extensão](#publicar-a-extensão)).
 
 Depois, reinicie o VS Code. Um ícone do AI Creator aparece na barra de atividades.
 
@@ -130,6 +132,53 @@ O campo `projeto` aceita o id ou o slug, e o campo `modelo` aceita o id ou o slu
 > Compile o projeto `blink-esp32` com o agente `detector-de-gestos` e me mostre os erros, se houver.
 
 O Claude usa `compilar_projeto` com o modelo TinyML do agente, espera o resultado e explica o log.
+
+## Agente com ferramentas da plataforma
+
+Um agente LLM pode ler, editar e compilar um projeto de firmware sozinho, usando as ferramentas da própria plataforma. Assim, o agente pode ver os erros do compilador, corrigir o código e compilar de novo.
+
+### Como ligar
+
+1. Abra o agente LLM no editor e vincule um **projeto**. Sem projeto vinculado, as ferramentas ficam desabilitadas, e o servidor também as ignora.
+2. Marque as ferramentas da plataforma:
+
+| Ferramenta (`aic.*`) | O que faz |
+|---|---|
+| `aic.listar_arquivos` | Lista os arquivos do projeto |
+| `aic.ler_arquivo` | Lê um arquivo do projeto |
+| `aic.escrever_arquivo` | Grava um arquivo do projeto |
+| `aic.compilar` | Compila o projeto e devolve o resultado |
+
+Os caminhos são sempre relativos ao projeto vinculado. Caminhos com `..` ou absolutos são recusados, então o agente não enxerga outros projetos nem arquivos do servidor.
+
+### Provedores
+
+- **Claude (Anthropic)** e **OpenAI** usam as ferramentas.
+- **Ollama** roda sem ferramentas. A execução avisa isso e segue só com o texto.
+
+### Limites
+
+- Cada execução aceita até 15 rodadas de ferramentas. Se o agente passar disso sem terminar, a execução falha com uma mensagem de erro.
+- `aic.escrever_arquivo` aceita até 200 KB por arquivo.
+- `aic.compilar` espera a compilação terminar por até 10 minutos. A resposta traz o status e as últimas 80 linhas do log.
+- Se a resposta for cortada no meio de uma ferramenta por limite de tokens, aumente o máximo de tokens do agente.
+
+Cada rodada do modelo conta nos tokens do agente. O consumo aparece em **Uso e custos** (veja [API.md](API.md#uso-e-custos-apiuso)).
+
+### Exemplo de uso
+
+> Compile o projeto `blink-esp32`, leia o erro do compilador e corrija o arquivo `src/main.cpp`. Compile de novo até passar.
+
+## Publicar a extensão
+
+A extensão do VS Code é publicada por um workflow do GitHub (`.github/workflows/release-vscode.yml`). Ele roda quando você envia uma tag `vscode-v*` (por exemplo, `vscode-v0.2.0`), ou pelo botão de execução manual.
+
+1. Atualize a versão em `extensions/vscode/package.json` e escreva a mudança em `extensions/vscode/CHANGELOG.md`.
+2. Crie e envie a tag, por exemplo `git tag vscode-v0.2.0` e `git push origin vscode-v0.2.0`.
+3. O workflow compila a extensão, gera o `.vsix` e cria (ou atualiza) a Release do GitHub com o arquivo anexado.
+4. A publicação no Marketplace roda `vsce publish` com o segredo `VSCE_PAT`. Ela só acontece se esse segredo estiver configurado no repositório. Sem o segredo, a Release sai e a publicação é pulada.
+
+Para publicar no Marketplace, o token `VSCE_PAT` precisa ser de um publisher com permissão de publicação. Guarde o token só como segredo do GitHub, nunca no código.
 
 ## Problemas comuns
 

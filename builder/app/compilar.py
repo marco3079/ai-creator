@@ -35,6 +35,22 @@ def _callback(url: str, token: str, corpo: dict) -> None:
         pass
 
 
+NOME_ARTEFATO_OTA = "firmware-ota.bin"
+
+
+def _copiar_artefato_ota(build_dir: str, saida_dir: str) -> str:
+    """Copia firmware.bin (só a aplicação) para firmware-ota.bin. Devolve o caminho de saída.
+
+    Levanta FileNotFoundError se o firmware.bin não existir (o chamador vira FALHA).
+    """
+    origem = os.path.join(build_dir, "firmware.bin")
+    if not os.path.exists(origem):
+        raise FileNotFoundError(f"firmware.bin não encontrado em {build_dir}")
+    destino = os.path.join(saida_dir, NOME_ARTEFATO_OTA)
+    shutil.copyfile(origem, destino)
+    return destino
+
+
 def _mesclar_esp(chip: str, build_dir: str, saida: str) -> tuple[bool, str]:
     """Gera firmware-merged.bin com bootloader, partitions e app nos offsets do chip."""
     off = OFFSETS_ESP[chip]
@@ -86,12 +102,15 @@ def executar_build(
         nome_artefato = info["artefato"]
         saida = os.path.join(saida_dir, nome_artefato)
 
+        artefato_ota = None
         if info["chip"] in OFFSETS_ESP:
             ok, log_merge = _mesclar_esp(info["chip"], build_dir, saida)
             log += "\n" + log_merge
             if not ok:
                 _callback(callback_url, callback_token, {"status": "FALHA", "log": _cortar_log(log)})
                 return
+            # Artefato OTA (só a aplicação), para a atualização pela rede (CONTRATOS-LEVA-B §5).
+            artefato_ota = _copiar_artefato_ota(build_dir, saida_dir)
         else:
             origem = os.path.join(build_dir, nome_artefato)
             if not os.path.exists(origem):
@@ -101,17 +120,16 @@ def executar_build(
             shutil.copyfile(origem, saida)
 
         relativo = os.path.relpath(saida, DATA_DIR).replace("\\", "/")
-        _callback(
-            callback_url,
-            callback_token,
-            {
-                "status": "SUCESSO",
-                "log": _cortar_log(log),
-                "artefato": relativo,
-                "offset": info["offset"],
-                "tamanhoBytes": os.path.getsize(saida),
-            },
-        )
+        corpo = {
+            "status": "SUCESSO",
+            "log": _cortar_log(log),
+            "artefato": relativo,
+            "offset": info["offset"],
+            "tamanhoBytes": os.path.getsize(saida),
+        }
+        if artefato_ota:
+            corpo["artefatoOta"] = os.path.relpath(artefato_ota, DATA_DIR).replace("\\", "/")
+        _callback(callback_url, callback_token, corpo)
     except subprocess.TimeoutExpired:
         log += f"\nTempo limite de {TIMEOUT_PIO} s excedido na compilação."
         _callback(callback_url, callback_token, {"status": "FALHA", "log": _cortar_log(log)})

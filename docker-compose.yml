@@ -39,6 +39,12 @@ services:
       FINETUNER_URL: http://finetuner:8003
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@aicreator.local}
       ADMIN_SENHA: ${ADMIN_SENHA:-trocar123}
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USUARIO: ${MQTT_USUARIO:-aic}
+      MQTT_SENHA: ${MQTT_SENHA:-troque-senha-mqtt}
+      MQTT_HOST_PUBLICO: ${MQTT_HOST_PUBLICO:-}
+      MQTT_PORTA: ${MQTT_PORTA:-1883}
+      SERVIDOR_URL_PUBLICA: ${SERVIDOR_URL_PUBLICA:-}
     volumes:
       - dados:/data
     healthcheck:
@@ -47,6 +53,26 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
+
+  # Broker MQTT da frota (placas ESP32). Sem ele o servidor funciona normalmente.
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    entrypoint: ["sh", "/aic/entrypoint.sh"]
+    environment:
+      MQTT_USUARIO: ${MQTT_USUARIO:-aic}
+      MQTT_SENHA: ${MQTT_SENHA:-troque-senha-mqtt}
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/entrypoint.sh:/aic/entrypoint.sh:ro
+      - mosquitto:/mosquitto/data
+    ports:
+      - "${MQTT_PORTA:-1883}:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 1883 -t '$$SYS/#' -C 1 -u \"$$MQTT_USUARIO\" -P \"$$MQTT_SENHA\" -W 3"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   client:
@@ -111,3 +137,4 @@ volumes:
   platformio:
   ollama:
   hf:
+  mosquitto:

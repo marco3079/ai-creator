@@ -64,11 +64,11 @@ def _executar_na_fila(pedido: PedidoTreino) -> None:
         finally:
             GPU.release()
     finally:
-        ativos.desmarcar('treinos', pedido.treinoId)
+        ativos.desmarcar('treinosModelo', pedido.treinoId)
 
 
 @app.post('/treinos', status_code=202)
 def criar_treino(pedido: PedidoTreino, tarefas: BackgroundTasks) -> dict:
-    ativos.marcar('treinos', pedido.treinoId)
+    ativos.marcar('treinosModelo', pedido.treinoId)
     tarefas.add_task(_executar_na_fila, pedido)
     return {'aceito': True}

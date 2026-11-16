@@ -1,0 +1,106 @@
+/* ---------- Frota (lista e detalhe do dispositivo) ---------- */
+
+.frota-filtros {
+  margin-bottom: 1rem;
+}
+
+/* Bolinha de conexão ao lado do nome do cartão. */
+.frota-bolinha {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--cor-texto-suave);
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+.frota-bolinha-on {
+  background: var(--cor-sucesso);
+  box-shadow: 0 0 0 3px var(--cor-verde-suave);
+}
+
+/* Barras do sinal Wi-Fi (RSSI). */
+.frota-sinal {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  margin-right: 0.45rem;
+  vertical-align: middle;
+}
+
+.frota-barra {
+  width: 4px;
+  border-radius: 1px;
+  background: var(--cor-borda);
+}
+
+.frota-barra-on {
+  background: var(--cor-primaria);
+}
+
+.frota-card .firmware-card-rodape {
+  flex-wrap: wrap;
+}
+
+.frota-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ---------- Detalhe do dispositivo ---------- */
+
+.frota-graficos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.frota-tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.frota-tabela th,
+.frota-tabela td {
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--cor-borda);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.frota-tabela th {
+  color: var(--cor-texto-suave);
+  font-weight: 500;
+  width: 40%;
+}
+
+.frota-guia {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ---------- Chave gerada (mostrada uma vez) ---------- */
+
+.frota-chave-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.frota-chave {
+  display: block;
+  font-family: monospace;
+  padding: 0.7rem;
+  background: var(--cor-superficie-2);
+  border: 1px solid var(--cor-borda);
+  border-radius: 6px;
+  word-break: break-all;
+}

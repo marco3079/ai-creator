@@ -115,6 +115,24 @@ export async function situacaoFila(): Promise<Record<NomeServico, { executando: 
   return situacao;
 }
 
+// Escolhe até `limite` itens da fila (já ordenada do mais antigo para o mais novo) sem dois do mesmo projeto,
+// e sem projetos que já têm build EXECUTANDO (projetosOcupados). Função pura, testada em isolamento.
+export function escolherSemRepetirProjeto<T extends { projetoId: number }>(
+  fila: T[],
+  projetosOcupados: ReadonlySet<number>,
+  limite: number,
+): T[] {
+  const usados = new Set<number>(projetosOcupados);
+  const escolhidos: T[] = [];
+  for (const item of fila) {
+    if (escolhidos.length >= limite) break;
+    if (usados.has(item.projetoId)) continue;
+    usados.add(item.projetoId);
+    escolhidos.push(item);
+  }
+  return escolhidos;
+}
+
 // Próximos FILA de um serviço, do mais antigo para o mais novo. Respeita a espera de 15 s entre tentativas.
 async function candidatos(nome: NomeServico, limite: number): Promise<Item[]> {
   const corte = new Date(Date.now() - ESPERA_NOVA_TENTATIVA_MS);
@@ -133,13 +151,19 @@ async function candidatos(nome: NomeServico, limite: number): Promise<Item[]> {
   }
 
   if (nome === 'builder') {
-    const builds = await prisma.build.findMany({
+    // Um projeto nunca tem dois builds ao mesmo tempo: os arquivos são regravados na pasta do projeto.
+    const emExecucao = await prisma.build.findMany({
+      where: { status: 'EXECUTANDO' },
+      select: { projetoId: true },
+      distinct: ['projetoId'],
+    });
+    const ocupados = new Set(emExecucao.map((b) => b.projetoId));
+    const filaBuilds = await prisma.build.findMany({
       where: { status: 'FILA', OR: [{ tentativas: 0 }, { atualizadoEm: { lte: corte } }] },
       orderBy: { criadoEm: 'asc' },
-      take: limite,
       select: { id: true, criadoEm: true, projetoId: true },
     });
-    for (const b of builds) {
+    for (const b of escolherSemRepetirProjeto(filaBuilds, ocupados, limite)) {
       itens.push({ tipo: 'build', id: b.id, servico: nome, criadoEm: b.criadoEm, vinculo: { projetoId: b.projetoId } });
     }
   }
