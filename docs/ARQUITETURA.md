@@ -24,6 +24,7 @@ flowchart TB
     mosquitto["mosquitto<br/>MQTT (1883)"]
     db[("db<br/>PostgreSQL 16 (5432)")]
     ollama["ollama<br/>(perfil ollama, 11434)"]
+    atualizador["atualizador<br/>Node + Git + Docker (4000, interna)"]
     dados[("volume dados<br/>/data")]
     hf[("volume hf<br/>cache do Hugging Face")]
   end
@@ -42,6 +43,7 @@ flowchart TB
   server -->|"POST /treinos (LLM local)"| finetuner
   server -->|"ajuste fino (LLM nuvem)"| openai
   server -->|"/api/tags"| ollama
+  server -->|"verificar e atualizar (token)"| atualizador
   trainer -->|"callback /api/interno/treinos e /treinos-modelo"| server
   builder -->|"callback /api/interno/builds"| server
   finetuner -->|"callback /api/interno/treinos-modelo"| server
@@ -63,7 +65,8 @@ flowchart TB
 | `builder` | `builder/` | Python 3.11, FastAPI, PlatformIO | 8002 | não |
 | `finetuner` | `finetuner/` | Python 3.11, FastAPI, PyTorch CUDA, Transformers, PEFT, TRL | 8003 | não (perfil `gpu`, exige GPU NVIDIA) |
 | `ollama` | (imagem `ollama/ollama`) | Ollama | 11434 | não (perfil `ollama`) |
-| `mosquitto` | `eclipse-mosquitto:2.0.20` | Broker MQTT da frota | 1883 | sim, `MQTT_PORTA` (1883), para as placas da rede local |
+| `mosquitto` | `mosquitto/` (imagem sobre `eclipse-mosquitto:2.0.20`) | Broker MQTT da frota | 1883 | sim, `MQTT_PORTA` (1883), para as placas da rede local |
+| `atualizador` | `atualizador/` | Node, Git e Docker CLI; baixa a versão nova e reconstrói o que mudou | 4000 | não (só o `server` acessa, pela rede interna) |
 
 O `client` é publicado para o navegador, e o `mosquitto` para as placas da rede local. O `server` conversa com a extensão, com o MCP e com o navegador pelo `client`, que encaminha `/api`. Os demais serviços internos não têm porta publicada.
 
@@ -72,11 +75,12 @@ O `client` é publicado para o navegador, e o `mosquitto` para as placas da rede
 | Volume | Montado em | Quem usa | Conteúdo |
 |---|---|---|---|
 | `dados_db` | `/var/lib/postgresql/data` (db) | db | Dados do PostgreSQL |
-| `dados` | `/data` | server, trainer, builder | Arquivos da plataforma |
+| `dados` | `/data` (e `/servidor`, só leitura, no atualizador) | server, trainer, builder, atualizador (só leitura) | Arquivos da plataforma |
 | `platformio` | `/root/.platformio` | builder | Plataformas e bibliotecas do PlatformIO, para não baixar a cada compilação |
 | `ollama` | `/root/.ollama` | ollama | Modelos locais |
 | `hf` | `/root/.cache/huggingface` | finetuner | Modelos base baixados do Hugging Face, para não baixar a cada treino |
 | `mosquitto` | `/mosquitto/data` | mosquitto | Dados do broker, como as mensagens retidas do status das placas |
+| `atualizador` | `/dados` | atualizador | Estado da atualização: `tarefa.json`, `implantado`, versão e cópias do banco (o banco em si fica em `backups/`, na pasta do projeto) |
 
 Dentro do volume `dados` (`/data`):
 
@@ -288,6 +292,41 @@ sequenceDiagram
 ```
 
 Os binários entram pela mesma fila de compilação. O build de uma placa OTA gera também o `firmware-ota.bin`, e só esse arquivo vai para a placa. O alvo de cada placa é definido na tela da frota, e só builds SUCESSO da mesma placa podem ser alvo.
+
+## Atualizador
+
+O botão **Atualizar agora** (Sistema > Atualização, só ADMIN) baixa a versão nova do GitHub e reconstrói só o que mudou. Quem faz o trabalho é o contêiner `atualizador` (pasta `atualizador/`), porque o `server` não consegue baixar código nem chamar o Docker. O serviço não publica porta: só o `server` fala com ele, pela rede interna (`ATUALIZADOR_URL`, padrão `http://atualizador:4000`).
+
+- **Imagem e montagens**: Node, Git e Docker CLI. A pasta do projeto entra em `/projeto` (com o `.git`), o soquete do Docker em `/var/run/docker.sock`, o volume `dados` em `/servidor` só para leitura e o volume `atualizador` em `/dados`. O banco não é acessado direto: a cópia é feita com `docker compose exec db pg_dump`.
+- **Token**: o cabeçalho `X-Atualizador-Token` leva `sha256('atualizador:' + JWT_SECRET)`. O `server` calcula com o segredo efetivo (`config.jwtSegredo`, que pode vir de `dados/segredos.json`). O atualizador usa o `JWT_SECRET` do ambiente, a não ser que seja o valor de exemplo; nesse caso lê o segredo de `/servidor/segredos.json`. Sem segredo, todo pedido recebe 401. `GET /saude` não pede token e é o healthcheck.
+- **Consulta**: `GET /estado` devolve a versão instalada (`implantado`), a última do GitHub, as novidades, a lista `servicos` que seriam reconstruídos e as `copias` em `backups/`. Com `?verificar=1` antes faz `git fetch --prune`. A tela verifica ao abrir, em segundo plano na subida (após 60 segundos) e a cada 6 horas.
+- **Serviços que serão reconstruídos**: o atualizador compara `git diff --name-only <implantado>..<remoto>` e aplica o mapa abaixo.
+
+| Arquivos que mudaram | Serviços reconstruídos |
+|---|---|
+| `server/` | `server` (build e up) |
+| `client/` | `client` (build e up) |
+| `trainer/` | `trainer` (build e up) |
+| `builder/` | `builder` (build e up) |
+| `finetuner/` | `finetuner` (build e up), só se estiver rodando (perfil `gpu`) |
+| `mosquitto/` | `mosquitto` (build e up; a imagem é própria, em `mosquitto/Dockerfile`) |
+| `docker-compose.yml` | todos os serviços rodando, menos `atualizador` e `db` (só up, sem build) |
+| `atualizador/` | nada; a tela só avisa que o atualizador mudou |
+| outros (`docs/`, `README.md`, `extensions/`, `mcp/`, `e2e/`, `exemplos/`...) | nada |
+
+Os serviços que o atualizador reconstrói não podem ter bind mount. O Compose roda de dentro do contêiner `atualizador`, e um caminho relativo (`./arquivo:/destino`) não existe no computador, porque o daemon do Docker do host o resolve sozinho. Por isso o `mosquitto` tem imagem própria, com a configuração e a entrada copiadas para dentro dela. O próprio `atualizador` tem bind mounts, mas nunca é reconstruído pela tela.
+
+Se o commit instalado for desconhecido (sem registro, ou que não existe mais no repositório), o atualizador reconstrói `server client trainer builder`, mais `finetuner` se estiver rodando.
+
+- **Sequência de uma atualização** (`POST /atualizar`, 202; 409 se já houver uma tarefa `EXECUTANDO`):
+  1. **Copiando o banco**: `pg_dump` pelo `docker compose exec -T db`, gravado em `backups/aicreator-AAAAMMDD-HHMMSS.sql` (escreve num `.parcial` e renomeia no fim). Se o comando falhar ou o arquivo vier vazio, a tarefa para aqui, antes de baixar o código. Ficam só as 5 cópias mais recentes.
+  2. **Baixando o código**: `git fetch --prune` e `git pull --ff-only origin <ramo>`. O atualizador nunca usa `reset`, `clean`, `stash` nem `checkout` de arquivos.
+  3. **Reconstruindo**: `docker compose build` só com os serviços da lista. Se a lista estiver vazia, a etapa é pulada com a mensagem "Nenhum serviço precisou ser reconstruído".
+  4. **Reiniciando**: `docker compose up -d --no-deps` com os mesmos serviços.
+  
+  No fim, grava `implantado` com o commit HEAD. A tarefa é única e o log guarda até 200 linhas de até 500 caracteres. O estado fica em `/dados/tarefa.json`.
+- **Por que o atualizador não se reconstrói**: ele é quem reconstrói os outros serviços, e reconstruir a si mesmo no meio da tarefa derrubaria o próprio processo. Se os arquivos dele mudarem, a tela avisa; para pegar a mudança, rode `docker compose up -d --build atualizador`.
+- **Registro do `implantado`**: os instaladores (`instalar.sh` e `instalar.ps1`) e os scripts `atualizar.sh` e `atualizar.ps1` gravam o commit instalado com `git rev-parse HEAD`, para a tela comparar com o GitHub. Numa pasta sem Git, a atualização pelo painel não funciona.
 
 ## Autenticação
 

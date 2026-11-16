@@ -75,6 +75,29 @@ Sem o `VSCE_PAT` só a Release com o `.vsix` é criada.
 
 Conecte o servidor MCP (veja `docs/INTEGRACOES.md`) e peça ao Claude Code para listar projetos, editar um arquivo e compilar. Esperado: as mudanças aparecem na plataforma e no **Histórico** do projeto.
 
+## 8. Atualização pelo painel
+
+Precisa de: uma instalação feita com `git clone` (não por ZIP), a conta de administrador e um commit novo no GitHub, feito **depois** da instalação, no mesmo ramo que está instalado.
+
+Passos:
+
+1. No terminal, anote o commit instalado: `git rev-parse --short HEAD`.
+2. No GitHub, faça um commit pequeno no ramo instalado. Para o primeiro teste, mude só o `README.md` (assim nenhum serviço precisa ser reconstruído).
+3. Entre como administrador e abra **Sistema > Atualização**. Clique em **Verificar agora**.
+4. Clique em **Atualizar agora** e acompanhe o log na tela.
+5. Depois, faça um segundo commit no GitHub que mexa em `server/` e repita os passos 3 e 4 (agora só o `server` deve ser reconstruído).
+
+| # | O que testar | Resultado esperado |
+|---|---|---|
+| 8.1 | Aviso no topo da tela | Para o administrador, aparece o aviso de versão nova. Para outro perfil, não aparece |
+| 8.2 | Verificar agora | A tela mostra o commit novo, quantos commits estão atrás e a lista de serviços a reconstruir (vazia para mudança só no `README.md`) |
+| 8.3 | Atualizar agora | As etapas passam por Copiando o banco, Baixando o código, Reconstruindo e Reiniciando. Ao final o estado fica OK e a versão instalada vira o commit novo |
+| 8.4 | Cópia do banco | Existe `backups/aicreator-AAAAMMDD-HHMMSS.sql` com o horário da atualização |
+| 8.5 | Só o que mudou | Com a mudança em `server/`, só o `server` é reconstruído; `client`, `trainer` e `builder` não mudam de imagem |
+| 8.6 | Pelo terminal | Com nada novo, `.\atualizar.ps1` (ou `sh atualizar.sh` no Linux e macOS) diz que o sistema já estava na última versão |
+
+O teste feito aqui antes do lançamento cobre só a **verificação** (o atualizador responde e compara o commit instalado com o do GitHub). A atualização completa (cópia do banco, `git pull`, reconstrução e reinício) só fica comprovada com um commit novo no GitHub, como descrito acima.
+
 ## Resultado do teste de GPU feito aqui
 
 Testado numa **RTX 2060 (6 GB)** com `llama3.2:1b` (`unsloth/Llama-3.2-1B-Instruct`), dataset de 12 conversas, 3 épocas:

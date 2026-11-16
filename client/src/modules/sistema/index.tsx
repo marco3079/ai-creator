@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import type { RotaModulo } from '../../lib/rotas';
 import './sistema.css';
 
+const Atualizacao = lazy(() => import('./Atualizacao').then((m) => ({ default: m.Atualizacao })));
 const Configuracoes = lazy(() => import('./Configuracoes').then((m) => ({ default: m.Configuracoes })));
 const Integracoes = lazy(() => import('./Integracoes').then((m) => ({ default: m.Integracoes })));
 const Logs = lazy(() => import('./Logs').then((m) => ({ default: m.Logs })));
@@ -49,6 +50,14 @@ export const rotas: RotaModulo[] = [
     perfis: ['ADMIN', 'DEV'],
     elemento: <Uso />,
     ordem: 53,
+  },
+  {
+    caminho: '/app/atualizacao',
+    rotulo: 'Atualização',
+    icone: 'download',
+    perfis: ['ADMIN'],
+    elemento: <Atualizacao />,
+    ordem: 54,
   },
   {
     caminho: '/app/tokens',

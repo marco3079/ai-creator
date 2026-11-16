@@ -149,6 +149,12 @@ if [ "$saudavel" != 1 ]; then
   exit 5
 fi
 
+# Registra no atualizador a versão que acabou de subir (o botão Atualizar da tela compara com ela).
+# Sem Git na pasta ou sem o serviço, o comando falha em silêncio e nada muda.
+docker compose exec -T atualizador sh -c 'git -C /projeto rev-parse HEAD > /dados/implantado.novo && mv /dados/implantado.novo /dados/implantado' >/dev/null 2>&1 || true
+tem_git=0
+[ -e .git ] && tem_git=1
+
 # 6) Resultado
 porta_web="$(ler_env WEB_PORT)"
 porta_web="${porta_web:-8080}"
@@ -161,3 +167,8 @@ echo "  Endereço:  http://localhost:${porta_web}"
 echo "  Login:     ${email_admin:-admin@aicreator.local}"
 echo "  Senha:     ${senha_admin:-trocar123}"
 echo "Troque a senha em Meu perfil no primeiro acesso."
+if [ "$tem_git" -ne 1 ]; then
+  echo ""
+  echo "Aviso: esta pasta não é um repositório Git (talvez tenha sido baixada como ZIP)."
+  echo "O botão Atualizar da tela não vai funcionar aqui. Para usar a atualização, instale de novo com git clone."
+fi

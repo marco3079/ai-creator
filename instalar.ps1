@@ -147,9 +147,22 @@ if (-not $emailAdmin) { $emailAdmin = 'admin@aicreator.local' }
 $senhaAdmin = Ler-Env 'ADMIN_SENHA'
 if (-not $senhaAdmin) { $senhaAdmin = 'trocar123' }
 
+# Registra no atualizador a versão que acabou de subir (o botão Atualizar da tela compara com ela).
+# Sem Git na pasta ou sem o serviço, o comando falha em silêncio e nada muda.
+$temGit = Test-Path -LiteralPath (Join-Path $PSScriptRoot '.git')
+$anteriorErro = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+docker compose exec -T atualizador sh -c 'git -C /projeto rev-parse HEAD > /dados/implantado.novo && mv /dados/implantado.novo /dados/implantado' *> $null
+$ErrorActionPreference = $anteriorErro
+
 Write-Host ''
 Write-Host 'AI Creator instalado e no ar.' -ForegroundColor Green
 Write-Host "  Endereço:  http://localhost:$portaWeb"
 Write-Host "  Login:     $emailAdmin"
 Write-Host "  Senha:     $senhaAdmin"
 Write-Host 'Troque a senha em Meu perfil no primeiro acesso.'
+if (-not $temGit) {
+    Write-Host ''
+    Write-Host 'Aviso: esta pasta não é um repositório Git (talvez tenha sido baixada como ZIP).'
+    Write-Host 'O botão Atualizar da tela não vai funcionar aqui. Para usar a atualização, instale de novo com git clone.'
+}

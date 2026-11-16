@@ -7,6 +7,7 @@ import { useTema } from '../lib/tema';
 import { NOME_PERFIL } from '../lib/tipos';
 import type { Perfil } from '../lib/tipos';
 import { Icone } from '../ui/icones';
+import { AvisoAtualizacao } from './AvisoAtualizacao';
 import { Busca } from './Busca';
 import { agrupar } from './grupos';
 import { MenuUsuario } from './MenuUsuario';
@@ -162,6 +163,7 @@ export function Layout({ menu }: { menu: RotaModulo[] }) {
               </div>
             </header>
           )}
+          <AvisoAtualizacao />
           <Outlet />
         </div>
       </main>

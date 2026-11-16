@@ -202,3 +202,7 @@ jobs:
         run: |
           docker compose config -q
           docker compose --profile ollama --profile gpu config -q
+      - name: Verificar sintaxe do atualizador e do script de atualização
+        run: |
+          node --check atualizador/servidor.mjs
+          bash -n atualizar.sh

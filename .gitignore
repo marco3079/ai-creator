@@ -4,6 +4,8 @@ dist/
 out/
 .env
 dados/
+# Cópias do banco feitas antes de atualizar (contêm dados)
+backups/
 .pio/
 __pycache__/
 *.vsix

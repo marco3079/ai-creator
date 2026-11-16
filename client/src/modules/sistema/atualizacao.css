@@ -1,0 +1,235 @@
+/* Tela Sistema → Atualização. Cores pelas variáveis de ui/estilo.css (claro e escuro). */
+
+.atualizacao {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.atualizacao-ajuda {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--cor-texto-suave);
+  overflow-wrap: anywhere;
+}
+
+.atualizacao-codigo {
+  font-family: ui-monospace, Consolas, 'Courier New', monospace;
+  font-size: 0.85rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--cor-superficie-2);
+  border: 1px solid var(--cor-borda);
+  overflow-wrap: anywhere;
+}
+
+.atualizacao-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.atualizacao-cartoes > .cartao {
+  min-width: 0;
+}
+
+.atualizacao-commit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.atualizacao-commit-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.atualizacao-mensagem {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.atualizacao-situacao {
+  margin-top: 12px;
+}
+
+.atualizacao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.atualizacao-novidades,
+.atualizacao-copias {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.atualizacao-novidade,
+.atualizacao-copia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-superficie-2);
+  min-width: 0;
+}
+
+.atualizacao-novidade-texto {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.atualizacao-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.atualizacao-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--cor-primaria-suave);
+  color: var(--cor-primaria);
+  overflow-wrap: anywhere;
+}
+
+/* Etapas do progresso */
+
+.atualizacao-etapas {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.atualizacao-etapa {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  border: 1px solid var(--cor-borda);
+  color: var(--cor-texto-suave);
+}
+
+.atualizacao-etapa-feita {
+  color: var(--cor-sucesso);
+  border-color: var(--cor-sucesso);
+  background: var(--cor-verde-suave);
+}
+
+.atualizacao-etapa-atual {
+  color: var(--cor-primaria);
+  border-color: var(--cor-primaria);
+  background: var(--cor-primaria-suave);
+  font-weight: 600;
+}
+
+.atualizacao-etapa-erro {
+  color: var(--cor-perigo);
+  border-color: var(--cor-perigo);
+  font-weight: 600;
+}
+
+.atualizacao-log {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, Consolas, 'Courier New', monospace;
+  font-size: 0.8rem;
+  border-radius: var(--raio-pequeno);
+  border: 1px solid var(--cor-borda);
+  background: var(--cor-superficie-2);
+  color: var(--cor-texto);
+}
+
+@media (max-width: 640px) {
+  .atualizacao-acoes .botao {
+    flex: 1 1 100%;
+  }
+}
+
+/* Aviso de versão nova no topo (layout/AvisoAtualizacao.tsx) */
+
+.aviso-atualizacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  background: var(--cor-primaria-suave);
+  color: var(--cor-texto);
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.aviso-atualizacao-icone {
+  flex: 0 0 auto;
+  color: var(--cor-primaria);
+}
+
+.aviso-atualizacao-texto {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aviso-atualizacao-link {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--cor-primaria);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.aviso-atualizacao-link:hover {
+  text-decoration: underline;
+}
+
+.aviso-atualizacao-fechar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -8px -8px -8px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+
+.aviso-atualizacao-fechar:hover {
+  background: var(--cor-superficie-2);
+  color: var(--cor-texto);
+}

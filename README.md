@@ -28,6 +28,7 @@
 - [Recursos](#recursos)
   - [Modelos](#modelos)
   - [Frota e OTA](#frota-e-ota)
+  - [Como atualizar](#como-atualizar)
 - [Telas](#telas)
 - [Placas suportadas](#placas-suportadas)
 - [Arquitetura](#arquitetura)
@@ -69,6 +70,7 @@ Quem trabalha no computador pode usar a extensão do VS Code e o servidor MCP co
 - **Claude Code e MCP**: ferramentas para listar e editar agentes e arquivos, compilar e treinar, além de comandos de plugin (`/ai-compilar`, `/ai-sincronizar-agentes`, `/ai-treinar`, `/ai-treinar-modelo`).
 - **Usuários e acesso**: perfis ADMIN, DEV e LEITOR, troca de senha no primeiro acesso, tokens de API para integrações e registro de atividades.
 - **Segurança**: segredos gerados e guardados no servidor, chave de cada placa (o servidor guarda só o hash) e broker MQTT com usuário e senha.
+- **Atualização pelo painel**: em Sistema > Atualização, o administrador verifica se há versão nova no GitHub, faz uma cópia do banco e atualiza o sistema, reconstruindo só o que mudou. Veja [Como atualizar](#como-atualizar).
 - **Visual**: tema claro e escuro, painel com indicadores, uso no celular e instalação como app (PWA).
 
 Para o que ainda precisa de teste com hardware ou chaves de API, veja [O que ainda precisa de teste com hardware ou chaves](TESTAR.md).
@@ -84,6 +86,17 @@ Veja o guia completo, com formatos de dataset, exemplos e custos, em [docs/MODEL
 Com o modelo de projeto **OTA**, uma placa ESP32 ou ESP32-S3 entra na frota: ela publica telemetria (sinal Wi-Fi, memória, versão do firmware) por MQTT, aparece como online ou offline e recebe a atualização de firmware pelo ar. Você gera a chave da placa, baixa o `aic_config.h`, grava a primeira vez por USB e, daí em diante, define a versão e atualiza sem cabo. O passo a passo está em [docs/FIRMWARE.md](docs/FIRMWARE.md#frota-e-ota).
 
 Os detalhes de cada parte estão em [docs/TINYML.md](docs/TINYML.md), [docs/FIRMWARE.md](docs/FIRMWARE.md) e [docs/INTEGRACOES.md](docs/INTEGRACOES.md).
+
+### Como atualizar
+
+Entre como administrador e abra **Sistema → Atualização**. Clique em **Verificar agora** para ver se há versão nova no GitHub e, se houver, em **Atualizar agora**.
+
+- Antes de baixar o código, o sistema copia o banco de dados para `backups/`. Ficam as 5 cópias mais recentes.
+- Só os serviços que mudaram são reconstruídos. Mudança só em documentação não reconstrói nada.
+- Quando há versão nova, um aviso aparece no topo da tela para o administrador.
+- Precisa de uma instalação feita com `git clone`. Numa pasta baixada como ZIP, a atualização não funciona.
+
+Pelo terminal, na pasta do projeto, o mesmo processo roda com `.\atualizar.ps1` (Windows) ou `sh atualizar.sh` (Linux e macOS).
 
 ## Telas
 
@@ -181,6 +194,7 @@ flowchart LR
   server -.->|"LLM local"| ollama["ollama<br/>(perfil ollama)"]
   server -.->|"ajuste fino local"| finetuner["finetuner<br/>Python + PyTorch<br/>(perfil gpu)"]
   finetuner -.->|"registra o adaptador"| ollama
+  server -->|"verificar e atualizar (rede interna)"| atualizador["atualizador<br/>Node + Git + Docker (porta 4000, interna)"]
   trainer --- dados[("volume dados<br/>/data")]
   builder --- dados
   finetuner --- dados
@@ -197,6 +211,7 @@ flowchart LR
 | `mosquitto` | Eclipse Mosquitto 2.0 | Broker MQTT da frota. Porta 1883 (`MQTT_PORTA`) publicada para as placas da rede local |
 | `db` | PostgreSQL 16 | Dados da plataforma |
 | `ollama` | Ollama | Modelos locais (só com o perfil `ollama`) |
+| `atualizador` | Node, Git, Docker | Baixa a versão nova do GitHub e reconstrói os serviços que mudaram (pedido pela tela Atualização, só ADMIN). Sem porta publicada |
 
 Os detalhes estão em [docs/ARQUITETURA.md](docs/ARQUITETURA.md) e a lista de rotas em [docs/API.md](docs/API.md).
 
@@ -289,6 +304,8 @@ ai-creator/
   docker-compose.yml          serviços, volumes e portas
   .env.example                modelo de configuração
   instalar.sh / instalar.ps1  instaladores (Linux/macOS e Windows)
+  atualizar.sh / atualizar.ps1 atualização pelo terminal (Linux/macOS e Windows)
+  atualizador/                serviço que atualiza o sistema pela tela (Node, Git, Docker)
   server/                     API (Node 20, TypeScript, Express, Prisma)
   client/                     interface web (React, TypeScript, Vite)
   trainer/                    treino TinyML e tabular (Python, FastAPI, TensorFlow, scikit-learn)

@@ -10,6 +10,22 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e
 
 - Ver as próximas ideias priorizadas em [docs/SUGESTOES.md](docs/SUGESTOES.md).
 
+## [0.4.0] - 2026-11-16
+
+### Adicionado
+
+- **Atualização pelo painel**: em **Sistema > Atualização**, o administrador verifica se há versão nova no GitHub, faz uma cópia do banco e atualiza o sistema. Quem faz o trabalho é o serviço `atualizador`, e só os serviços que mudaram são reconstruídos. Um aviso no topo da tela aparece para o administrador quando há versão nova. A verificação também roda na subida do sistema e a cada 6 horas.
+- Cópia do banco antes de cada atualização, em `backups/aicreator-AAAAMMDD-HHMMSS.sql` (ficam as 5 mais recentes).
+- Scripts **`atualizar.ps1`** (Windows) e **`atualizar.sh`** (Linux e macOS) para atualizar pelo terminal, com a mesma cópia do banco.
+
+### Alterado
+
+- O instalador registra a versão que acabou de subir no atualizador, para a tela comparar com o GitHub. Numa pasta sem Git (instalação por ZIP), o instalador avisa que a atualização pelo painel não funciona.
+
+### Segurança
+
+- O atualizador usa o Docker deste computador. Por isso não publica porta, só o `server` fala com ele, só o perfil ADMIN usa a atualização, e o token é derivado do `JWT_SECRET`.
+
 ## [0.3.0] - 2026-11-16
 
 ### Adicionado

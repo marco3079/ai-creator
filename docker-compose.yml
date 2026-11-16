@@ -45,6 +45,8 @@ services:
       MQTT_HOST_PUBLICO: ${MQTT_HOST_PUBLICO:-}
       MQTT_PORTA: ${MQTT_PORTA:-1883}
       SERVIDOR_URL_PUBLICA: ${SERVIDOR_URL_PUBLICA:-}
+      # Atualizador pelo painel (sem porta publicada)
+      ATUALIZADOR_URL: http://atualizador:4000
     volumes:
       - dados:/data
     healthcheck:
@@ -57,14 +59,13 @@ services:
 
   # Broker MQTT da frota (placas ESP32). Sem ele o servidor funciona normalmente.
   mosquitto:
-    image: eclipse-mosquitto:2.0.20
+    # Imagem própria (mosquitto/Dockerfile): sem bind mount, para o atualizador poder reconstruí-la
+    build: ./mosquitto
     entrypoint: ["sh", "/aic/entrypoint.sh"]
     environment:
       MQTT_USUARIO: ${MQTT_USUARIO:-aic}
       MQTT_SENHA: ${MQTT_SENHA:-troque-senha-mqtt}
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./mosquitto/entrypoint.sh:/aic/entrypoint.sh:ro
       - mosquitto:/mosquitto/data
     ports:
       - "${MQTT_PORTA:-1883}:1883"
@@ -131,6 +132,28 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
+  # Atualizador: baixa a versão nova do GitHub (Sistema > Atualização) e reconstrói só o que mudou.
+  # Sem porta publicada: só o server fala com ele. Usa o Docker deste computador, então é sensível.
+  atualizador:
+    build: ./atualizador
+    # init recolhe os processos filhos do Git que terminam depois do tempo limite
+    init: true
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
+      PROJETO_COMPOSE: ai-creator
+    volumes:
+      - .:/projeto
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dados:/servidor:ro
+      - atualizador:/dados
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
 volumes:
   dados_db:
   dados:
@@ -138,3 +161,4 @@ volumes:
   ollama:
   hf:
   mosquitto:
+  atualizador:
