@@ -14,7 +14,7 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Instalar dependências
@@ -48,7 +48,7 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Instalar dependências
@@ -81,7 +81,7 @@ jobs:
           echo "Servidor não respondeu a tempo"
           docker compose logs server | tail -100
           exit 1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Instalar dependências do E2E
@@ -109,7 +109,7 @@ jobs:
         working-directory: client
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Instalar dependências
@@ -173,7 +173,7 @@ jobs:
         working-directory: extensions/vscode
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Instalar e compilar
@@ -187,7 +187,7 @@ jobs:
         working-directory: integrations/claude-code/mcp-server
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Instalar e compilar
