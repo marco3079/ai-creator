@@ -25,7 +25,7 @@ jobs:
       - name: Gerar .vsix
         run: npx vsce package --no-dependencies -o ai-creator.vsix
       - name: Guardar o .vsix
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ai-creator-vsix
           path: extensions/vscode/ai-creator.vsix
